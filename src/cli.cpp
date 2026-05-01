@@ -46,6 +46,7 @@ int runFile(std::string_view path) {
         .hint = "check the path is correct and the file exists",
         .message = "could not open '" + std::string(path) + "'",
         .filename = std::string(path),
+        .sourceLine = {},
         .line = 0,
         .col = 0,
     });

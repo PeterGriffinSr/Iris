@@ -2,14 +2,13 @@ project(
     'iris',
     'cpp',
     version: '0.1.0',
-    license: '',
-    default_options: ['cpp_std=c++20'],
+    license: 'GPL-3.0-only',
+    default_options: ['cpp_std=c++20', 'warning_level=3'],
 )
 
 cxx = meson.get_compiler('cpp')
 
 version_h = vcs_tag(
-    command: ['git', 'describe', '--tags', '--always'],
     input: 'src/include/version.hpp.in',
     output: 'version.hpp',
     fallback: meson.project_version(),

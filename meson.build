@@ -3,15 +3,15 @@ project(
     'cpp',
     version: '0.1.0',
     license: 'GPL-3.0-only',
-    default_options: ['cpp_std=c++20', 'warning_level=3'],
+    default_options: ['warning_level=3', 'cpp_std=c++20'],
 )
 
 cxx = meson.get_compiler('cpp')
 
-version_h = vcs_tag(
+version_h = configure_file(
     input: 'src/include/version.hpp.in',
     output: 'version.hpp',
-    fallback: meson.project_version(),
+    configuration: {'VCS_TAG': meson.project_version()},
 )
 
 gen_errors = find_program('scripts/gen_errors.py')

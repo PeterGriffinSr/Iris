@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdint>
+#include "src/include/span.hpp"
 #include <string>
 
 enum class TokenType {
@@ -18,5 +18,5 @@ enum class TokenType {
 struct Token {
   TokenType type;
   std::string value;
-  uint32_t line, column;
+  Span span;
 };

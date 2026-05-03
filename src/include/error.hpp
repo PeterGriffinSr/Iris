@@ -2,6 +2,7 @@
 
 #include "src/include/error_codes.hpp"
 #include "src/include/options.hpp"
+#include "src/include/span.hpp"
 #include <optional>
 #include <string>
 
@@ -12,7 +13,7 @@ struct Diagnostic {
   std::optional<Error> code;
   std::optional<std::string> hint;
   std::string message, filename, sourceLine;
-  uint32_t line, col;
+  Span span;
 };
 
 class DiagnosticBag {

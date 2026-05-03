@@ -8,6 +8,7 @@ class Lexer {
 public:
   explicit Lexer(std::string_view source, std::string_view filename,
                  DiagnosticBag &bag);
+
   std::vector<Token> tokenize();
 
 private:
@@ -22,17 +23,23 @@ private:
   [[nodiscard]] char peek(size_t offset = 0) const noexcept;
   char advance() noexcept;
   bool match(char expected) noexcept;
+
+  [[nodiscard]] Token makeToken(TokenType type, std::string value,
+                                Span span) const;
+  [[nodiscard]] Span makeSpan(uint32_t startLine,
+                              uint32_t startCol) const noexcept;
+  [[nodiscard]] std::string getSourceLine(uint32_t lineNum) const;
+  [[noreturn]] void fatalError(std::optional<Error> code, std::string msg,
+                               std::optional<std::string> hint,
+                               Span span) const;
   [[nodiscard]] bool shouldInsertSemicolon() const noexcept;
   [[nodiscard]] bool needsSemicolonBefore(char next) const noexcept;
   [[nodiscard]] static TokenType effectiveLastType(const Token &tok) noexcept;
-  [[nodiscard]] std::string getSourceLine(uint32_t lineNum) const;
-  [[noreturn]] void fatalError(std::optional<Error> code, std::string msg,
-                               std::optional<std::string> hint, uint32_t line,
-                               uint32_t col) const;
   void skipWhitespaceAndComments(std::vector<Token> &out);
-  [[nodiscard]] Token makeToken(TokenType type, std::string value) const;
-  [[nodiscard]] Token scanNumber();
-  [[nodiscard]] Token scanString();
-  [[nodiscard]] Token scanIdentifierOrKeyword();
-  [[nodiscard]] Token scanOperatorOrDelimiter(uint32_t col);
+  [[nodiscard]] Token scanNumber(uint32_t startLine, uint32_t startCol);
+  [[nodiscard]] Token scanString(uint32_t startLine, uint32_t startCol);
+  [[nodiscard]] Token scanIdentifierOrKeyword(uint32_t startLine,
+                                              uint32_t startCol);
+  [[nodiscard]] Token scanOperatorOrDelimiter(uint32_t startLine,
+                                              uint32_t startCol);
 };

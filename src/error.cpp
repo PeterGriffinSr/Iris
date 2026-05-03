@@ -1,8 +1,8 @@
 #include "src/include/error.hpp"
 #include "error_docs.hpp"
-#include <sstream>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 
 namespace {
 
@@ -32,30 +32,45 @@ void printDiagnostic(const Diagnostic &d) {
     std::cerr << '[' << formatCode(*d.code) << ']';
   std::cerr << ": " << d.message << '\n';
 
-  if (d.line > 0)
-    std::cerr << " --> " << d.filename << ':' << d.line << ':' << d.col << '\n';
+  const Span &sp = d.span;
+  if (sp.startLine == 0)
+    goto hints;
+
+  std::cerr << " --> " << d.filename << ':' << sp.startLine << ':'
+            << sp.startCol << '\n';
 
   if (!d.sourceLine.empty()) {
-    std::string lineStr = std::to_string(d.line);
+    std::string lineStr = std::to_string(sp.startLine);
     size_t gutter = lineStr.size();
+    std::string gutterPad(gutter + 1, ' ');
 
-    std::cerr << std::string(gutter + 1, ' ') << "|\n";
+    std::cerr << gutterPad << "|\n";
     std::cerr << lineStr << " | " << d.sourceLine << '\n';
-    std::cerr << std::string(gutter + 1, ' ') << "| "
-              << std::string(d.col > 0 ? d.col - 1 : 0, ' ') << "^\n";
+    std::cerr << gutterPad << "| ";
+
+    uint32_t offset = sp.startCol > 0 ? sp.startCol - 1 : 0;
+    std::cerr << std::string(offset, ' ');
+
+    uint32_t underlineWidth = sp.isMultiLine() ? 1 : std::max(sp.width(), 1u);
+    std::cerr << std::string(underlineWidth, '^') << '\n';
   }
 
-  if ((d.hint || d.code) && d.line > 0) {
-    std::string lineStr = std::to_string(d.line);
+  if ((d.hint || d.code) && sp.startLine > 0) {
+    std::string lineStr = std::to_string(sp.startLine);
     std::cerr << std::string(lineStr.size() + 1, ' ') << "|\n";
   }
 
+hints:
   if (d.hint)
     std::cerr << "= hint: " << *d.hint << '\n';
 
   if (d.code)
     std::cerr << "= note: run `iris --explain " << formatCode(*d.code)
               << "` for more detail\n";
+}
+
+std::string plural(uint32_t n, std::string_view word) {
+  return std::to_string(n) + ' ' + std::string(word) + (n == 1 ? "" : "s");
 }
 
 #ifndef _WIN32
@@ -76,10 +91,6 @@ FILE *openPager() {
     return popen("glow - | less -R", "w");
   return popen("less -R", "w");
 #endif
-}
-
-std::string plural(uint32_t n, std::string_view word) {
-  return std::to_string(n) + ' ' + std::string(word) + (n == 1 ? "" : "s");
 }
 
 } // namespace
@@ -106,8 +117,7 @@ void DiagnosticBag::emit(const Diagnostic &diag) {
                    "); stopping compilation",
         .filename = diag.filename,
         .sourceLine = {},
-        .line = 0,
-        .col = 0,
+        .span = {0, 0, 0, 0},
     });
   }
 }

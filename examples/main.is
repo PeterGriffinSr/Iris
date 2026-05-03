@@ -1,3 +1,6 @@
-let fib(n) {~
-    fib(n - 1) & fib(n - 2)~
+let fib(n) {
+    fib(n - 1) + fib(n - 2)
 }
+
+let x = fib(10)
+let y = x + 1

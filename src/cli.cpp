@@ -19,7 +19,7 @@ void printUsage() {
                "\n"
                "Options:\n"
                "  --werror                      Treat all warnings as errors\n"
-               "  --max-errors                  Stop after n errors (default: "
+               "  --max-errors <n>              Stop after n errors (default: "
                "20, 0 = unlimited)\n";
 }
 
@@ -50,8 +50,7 @@ int runFile(std::string_view path, const CompilerOptions &opts) {
         .message = "could not open '" + std::string(path) + "'",
         .filename = std::string(path),
         .sourceLine = {},
-        .line = 0,
-        .col = 0,
+        .span = {0, 0, 0, 0},
     });
   }
 
@@ -109,13 +108,14 @@ const std::unordered_map<std::string_view, Flag> k_flags = {
             std::from_chars(arg.data(), arg.data() + arg.size(), n);
         if (ec != std::errc{} || ptr != arg.data() + arg.size()) {
           std::cerr
-              << "error: -- max-errors expects a non-negative integer, got '"
+              << "error: --max-errors expects a non-negative integer, got '"
               << arg << "'\n";
-          return -1;
+          return 1;
         }
         opts.maxErrors = n;
         return -1;
-      }}}};
+      }}},
+};
 
 } // namespace
 

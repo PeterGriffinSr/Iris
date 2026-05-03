@@ -46,8 +46,12 @@ bool Lexer::match(char expected) noexcept {
   return true;
 }
 
-Token Lexer::makeToken(TokenType type, std::string value) const {
-  return Token{type, std::move(value), m_line, m_col};
+Span Lexer::makeSpan(uint32_t startLine, uint32_t startCol) const noexcept {
+  return Span{startLine, startCol, m_line, m_col};
+}
+
+Token Lexer::makeToken(TokenType type, std::string value, Span span) const {
+  return Token{type, std::move(value), span};
 }
 
 std::string Lexer::getSourceLine(uint32_t lineNum) const {
@@ -67,16 +71,15 @@ std::string Lexer::getSourceLine(uint32_t lineNum) const {
 
 [[noreturn]] void Lexer::fatalError(std::optional<Error> code, std::string msg,
                                     std::optional<std::string> hint,
-                                    uint32_t line, uint32_t col) const {
+                                    Span span) const {
   emitFatal(Diagnostic{
       .severity = Severity::Error,
       .code = code,
       .hint = std::move(hint),
       .message = std::move(msg),
       .filename = std::string(m_filename),
-      .sourceLine = getSourceLine(line),
-      .line = line,
-      .col = col,
+      .sourceLine = getSourceLine(span.startLine),
+      .span = span,
   });
 }
 
@@ -142,7 +145,8 @@ void Lexer::skipWhitespaceAndComments(std::vector<Token> &out) {
     char c = peek();
     if (c == '\n') {
       if (shouldInsertSemicolon()) {
-        out.push_back(makeToken(TokenType::Semicolon, ";"));
+        Span sp{m_line, m_col, m_line, m_col};
+        out.push_back(makeToken(TokenType::Semicolon, ";", sp));
         m_last = TokenType::Semicolon;
       }
       advance();
@@ -154,7 +158,7 @@ void Lexer::skipWhitespaceAndComments(std::vector<Token> &out) {
   }
 }
 
-Token Lexer::scanNumber() {
+Token Lexer::scanNumber(uint32_t startLine, uint32_t startCol) {
   size_t start = m_pos - 1;
 
   while (!atEnd() && std::isdigit(peek()))
@@ -175,12 +179,11 @@ Token Lexer::scanNumber() {
   }
 
   return makeToken(TokenType::Number,
-                   std::string(m_source.substr(start, m_pos - start)));
+                   std::string(m_source.substr(start, m_pos - start)),
+                   makeSpan(startLine, startCol));
 }
 
-Token Lexer::scanString() {
-  uint32_t startLine = m_line;
-  uint32_t startCol = m_col - 1;
+Token Lexer::scanString(uint32_t startLine, uint32_t startCol) {
   std::string value;
 
   while (!atEnd() && peek() != '"') {
@@ -192,7 +195,7 @@ Token Lexer::scanString() {
 
     if (atEnd())
       fatalError(LexerError::UnterminatedString, "unterminated string escape",
-                 std::nullopt, m_line, m_col);
+                 std::nullopt, makeSpan(startLine, startCol));
 
     char esc = advance();
     switch (esc) {
@@ -214,8 +217,8 @@ Token Lexer::scanString() {
     default:
       fatalError(LexerError::UnknownEscape,
                  std::string("unknown escape sequence '\\") + esc + '\'',
-                 "valid sequences: \\n, \\t, \\r, \\\", \\\\", m_line,
-                 m_col - 2);
+                 "valid sequences: \\n, \\t, \\r, \\\", \\\\",
+                 makeSpan(m_line, m_col - 2));
     }
   }
 
@@ -223,13 +226,14 @@ Token Lexer::scanString() {
     fatalError(
         LexerError::UnterminatedString, "unterminated string",
         "every string must be closed with a matching '\"' on the same line",
-        startLine, startCol);
+        makeSpan(startLine, startCol));
 
   advance();
-  return makeToken(TokenType::String, std::move(value));
+  return makeToken(TokenType::String, std::move(value),
+                   makeSpan(startLine, startCol));
 }
 
-Token Lexer::scanIdentifierOrKeyword() {
+Token Lexer::scanIdentifierOrKeyword(uint32_t startLine, uint32_t startCol) {
   size_t start = m_pos - 1;
   while (!atEnd() && (std::isalnum(peek()) || peek() == '_'))
     advance();
@@ -238,77 +242,90 @@ Token Lexer::scanIdentifierOrKeyword() {
   auto it = s_keywords.find(word);
   TokenType type =
       (it != s_keywords.end()) ? TokenType::Keyword : TokenType::Identifier;
-  return makeToken(type, std::move(word));
+  return makeToken(type, std::move(word), makeSpan(startLine, startCol));
 }
 
-Token Lexer::scanOperatorOrDelimiter(uint32_t col) {
+Token Lexer::scanOperatorOrDelimiter(uint32_t startLine, uint32_t startCol) {
   char c = m_source[m_pos - 1];
 
   switch (c) {
   case '+':
-    return makeToken(TokenType::Operator, "+");
+    return makeToken(TokenType::Operator, "+", makeSpan(startLine, startCol));
   case '*':
-    return makeToken(TokenType::Operator, "*");
+    return makeToken(TokenType::Operator, "*", makeSpan(startLine, startCol));
   case '/':
-    return makeToken(TokenType::Operator, "/");
+    return makeToken(TokenType::Operator, "/", makeSpan(startLine, startCol));
   case '%':
-    return makeToken(TokenType::Operator, "%");
+    return makeToken(TokenType::Operator, "%", makeSpan(startLine, startCol));
   case '^':
-    return makeToken(TokenType::Operator, "^");
+    return makeToken(TokenType::Operator, "^", makeSpan(startLine, startCol));
   case '.':
-    return makeToken(TokenType::Operator, ".");
+    return makeToken(TokenType::Operator, ".", makeSpan(startLine, startCol));
   case '-':
-    return makeToken(TokenType::Operator, match('>') ? "->" : "-");
+    return makeToken(TokenType::Operator, match('>') ? "->" : "-",
+                     makeSpan(startLine, startCol));
   case '=':
-    return makeToken(TokenType::Operator, match('=') ? "==" : "=");
+    return makeToken(TokenType::Operator, match('=') ? "==" : "=",
+                     makeSpan(startLine, startCol));
   case '!':
-    return makeToken(TokenType::Operator, match('=') ? "!=" : "!");
+    return makeToken(TokenType::Operator, match('=') ? "!=" : "!",
+                     makeSpan(startLine, startCol));
   case '<':
-    return makeToken(TokenType::Operator, match('=') ? "<=" : "<");
+    return makeToken(TokenType::Operator, match('=') ? "<=" : "<",
+                     makeSpan(startLine, startCol));
   case '>':
-    return makeToken(TokenType::Operator, match('=') ? ">=" : ">");
+    return makeToken(TokenType::Operator, match('=') ? ">=" : ">",
+                     makeSpan(startLine, startCol));
+
   case '&':
     if (match('&'))
-      return makeToken(TokenType::Operator, "&&");
-    m_bag.emit(Diagnostic{.severity = Severity::Error,
-                          .code = std::nullopt,
-                          .hint = std::string("use '&&' for logical and"),
-                          .message = "bitwise '&' is not supported",
-                          .filename = std::string(m_filename),
-                          .sourceLine = getSourceLine(m_line),
-                          .line = m_line,
-                          .col = col});
-    return makeToken(TokenType::Error, "&");
+      return makeToken(TokenType::Operator, "&&",
+                       makeSpan(startLine, startCol));
+    m_bag.emit(Diagnostic{
+        .severity = Severity::Error,
+        .code = std::nullopt,
+        .hint = std::string("use '&&' for logical and"),
+        .message = "bitwise '&' is not supported",
+        .filename = std::string(m_filename),
+        .sourceLine = getSourceLine(m_line),
+        .span = makeSpan(startLine, startCol),
+    });
+    return makeToken(TokenType::Error, "&", makeSpan(startLine, startCol));
+
   case '|':
     if (match('|'))
-      return makeToken(TokenType::Operator, "||");
-    m_bag.emit(Diagnostic{.severity = Severity::Error,
-                          .code = std::nullopt,
-                          .hint = std::string("use '||' for logical or"),
-                          .message = "bitwise '|' is not supported",
-                          .filename = std::string(m_filename),
-                          .sourceLine = getSourceLine(m_line),
-                          .line = m_line,
-                          .col = col});
-    return makeToken(TokenType::Error, "|");
+      return makeToken(TokenType::Operator, "||",
+                       makeSpan(startLine, startCol));
+    m_bag.emit(Diagnostic{
+        .severity = Severity::Error,
+        .code = std::nullopt,
+        .hint = std::string("use '||' for logical or"),
+        .message = "bitwise '|' is not supported",
+        .filename = std::string(m_filename),
+        .sourceLine = getSourceLine(m_line),
+        .span = makeSpan(startLine, startCol),
+    });
+    return makeToken(TokenType::Error, "|", makeSpan(startLine, startCol));
+
   case '(':
-    return makeToken(TokenType::Delimiter, "(");
+    return makeToken(TokenType::Delimiter, "(", makeSpan(startLine, startCol));
   case ')':
-    return makeToken(TokenType::Delimiter, ")");
+    return makeToken(TokenType::Delimiter, ")", makeSpan(startLine, startCol));
   case '{':
-    return makeToken(TokenType::Delimiter, "{");
+    return makeToken(TokenType::Delimiter, "{", makeSpan(startLine, startCol));
   case '}':
-    return makeToken(TokenType::Delimiter, "}");
+    return makeToken(TokenType::Delimiter, "}", makeSpan(startLine, startCol));
   case '[':
-    return makeToken(TokenType::Delimiter, "[");
+    return makeToken(TokenType::Delimiter, "[", makeSpan(startLine, startCol));
   case ']':
-    return makeToken(TokenType::Delimiter, "]");
+    return makeToken(TokenType::Delimiter, "]", makeSpan(startLine, startCol));
   case ',':
-    return makeToken(TokenType::Delimiter, ",");
+    return makeToken(TokenType::Delimiter, ",", makeSpan(startLine, startCol));
   case ':':
-    return makeToken(TokenType::Delimiter, ":");
+    return makeToken(TokenType::Delimiter, ":", makeSpan(startLine, startCol));
   case ';':
-    return makeToken(TokenType::Semicolon, ";");
+    return makeToken(TokenType::Semicolon, ";", makeSpan(startLine, startCol));
+
   default:
     m_bag.emit(Diagnostic{
         .severity = Severity::Error,
@@ -318,10 +335,10 @@ Token Lexer::scanOperatorOrDelimiter(uint32_t col) {
         .message = std::string("unexpected character '") + c + '\'',
         .filename = std::string(m_filename),
         .sourceLine = getSourceLine(m_line),
-        .line = m_line,
-        .col = col,
+        .span = makeSpan(startLine, startCol),
     });
-    return makeToken(TokenType::Error, std::string(1, c));
+    return makeToken(TokenType::Error, std::string(1, c),
+                     makeSpan(startLine, startCol));
   }
 }
 
@@ -333,27 +350,33 @@ std::vector<Token> Lexer::tokenize() {
     skipWhitespaceAndComments(tokens);
 
     if (atEnd()) {
-      if (shouldInsertSemicolon())
-        tokens.push_back(makeToken(TokenType::Semicolon, ";"));
-      tokens.push_back(makeToken(TokenType::Eof, ""));
+      if (shouldInsertSemicolon()) {
+        Span sp{m_line, m_col, m_line, m_col};
+        tokens.push_back(makeToken(TokenType::Semicolon, ";", sp));
+      }
+      Span sp{m_line, m_col, m_line, m_col};
+      tokens.push_back(makeToken(TokenType::Eof, "", sp));
       break;
     }
 
     if (needsSemicolonBefore(peek())) {
-      tokens.push_back(makeToken(TokenType::Semicolon, ";"));
+      Span sp{m_line, m_col, m_line, m_col};
+      tokens.push_back(makeToken(TokenType::Semicolon, ";", sp));
       m_last = TokenType::Semicolon;
     }
 
+    uint32_t startLine = m_line;
     uint32_t startCol = m_col;
     char c = advance();
+
     Token tok = [&]() -> Token {
       if (std::isdigit(c))
-        return scanNumber();
+        return scanNumber(startLine, startCol);
       if (c == '"')
-        return scanString();
+        return scanString(startLine, startCol);
       if (std::isalpha(c) || c == '_')
-        return scanIdentifierOrKeyword();
-      return scanOperatorOrDelimiter(startCol);
+        return scanIdentifierOrKeyword(startLine, startCol);
+      return scanOperatorOrDelimiter(startLine, startCol);
     }();
 
     if (tok.type == TokenType::Delimiter) {
@@ -368,7 +391,6 @@ std::vector<Token> Lexer::tokenize() {
         --m_braceDepth;
     }
 
-    tok.column = startCol;
     m_last = effectiveLastType(tok);
     tokens.push_back(std::move(tok));
   }

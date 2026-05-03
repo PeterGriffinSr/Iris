@@ -1,2 +1,7 @@
-.cache
-build
+# Build outputs
+build/
+.cache/
+
+# Generated docs
+html/
+latex/

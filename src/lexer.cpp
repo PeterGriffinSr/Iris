@@ -1,22 +1,25 @@
 #include "src/include/lexer.hpp"
-#include "src/include/error.hpp"
-#include "src/include/error_codes.hpp"
 #include <unordered_map>
 #include <unordered_set>
 
 static const std::unordered_map<std::string, TokenType> s_keywords = {
-    {"let", TokenType::Keyword},  {"class", TokenType::Keyword},
-    {"self", TokenType::Keyword}, {"if", TokenType::Keyword},
-    {"else", TokenType::Keyword}, {"return", TokenType::Keyword},
-    {"true", TokenType::Keyword}, {"false", TokenType::Keyword},
-    {"null", TokenType::Keyword},
+    {"let", TokenType::Keyword},   {"if", TokenType::Keyword},
+    {"else", TokenType::Keyword},  {"true", TokenType::Keyword},
+    {"false", TokenType::Keyword},
 };
 
-static const std::unordered_set<std::string> s_openingKeywords = {
-    "let", "class", "if", "else"};
+static const std::unordered_set<std::string> s_openingKeywords = {"let", "if",
+                                                                  "else"};
 
-Lexer::Lexer(std::string_view source, std::string_view filename)
-    : m_source(source), m_filename(filename) {}
+Lexer::Lexer(std::string_view source, std::string_view filename,
+             DiagnosticBag &bag)
+    : m_source(source), m_filename(filename), m_bag(bag) {
+  if (m_source.size() >= 3 && (unsigned char)m_source[0] == 0xEF &&
+      (unsigned char)m_source[1] == 0xBB &&
+      (unsigned char)m_source[2] == 0xBF) {
+    m_source.remove_prefix(3);
+  }
+}
 
 bool Lexer::atEnd() const noexcept { return m_pos >= m_source.size(); }
 
@@ -88,6 +91,39 @@ bool Lexer::shouldInsertSemicolon() const noexcept {
   default:
     return false;
   }
+}
+
+bool Lexer::needsSemicolonBefore(char next) const noexcept {
+  switch (m_last) {
+  case TokenType::Identifier:
+  case TokenType::Number:
+  case TokenType::String:
+  case TokenType::Delimiter:
+    break;
+  default:
+    return false;
+  }
+
+  if (next == '}') {
+    return m_parenDepth == 0 &&
+           (m_last == TokenType::Identifier || m_last == TokenType::Number ||
+            m_last == TokenType::String);
+  }
+
+  if (!std::isalpha(next) && next != '_' && !std::isdigit(next) && next != '"')
+    return false;
+
+  if (std::isalpha(next) || next == '_') {
+    size_t start = m_pos;
+    size_t i = start;
+    while (i < m_source.size() &&
+           (std::isalnum(m_source[i]) || m_source[i] == '_'))
+      ++i;
+    if (m_source.substr(start, i - start) == "else")
+      return false;
+  }
+
+  return true;
 }
 
 TokenType Lexer::effectiveLastType(const Token &tok) noexcept {
@@ -205,8 +241,9 @@ Token Lexer::scanIdentifierOrKeyword() {
   return makeToken(type, std::move(word));
 }
 
-Token Lexer::scanOperatorOrDelimiter(uint32_t startCol) {
+Token Lexer::scanOperatorOrDelimiter(uint32_t col) {
   char c = m_source[m_pos - 1];
+
   switch (c) {
   case '+':
     return makeToken(TokenType::Operator, "+");
@@ -233,13 +270,27 @@ Token Lexer::scanOperatorOrDelimiter(uint32_t startCol) {
   case '&':
     if (match('&'))
       return makeToken(TokenType::Operator, "&&");
-    fatalError(std::nullopt, "expected '&&', found '&'", "did you mean '&&'?",
-               m_line, startCol);
+    m_bag.emit(Diagnostic{.severity = Severity::Error,
+                          .code = std::nullopt,
+                          .hint = std::string("use '&&' for logical and"),
+                          .message = "bitwise '&' is not supported",
+                          .filename = std::string(m_filename),
+                          .sourceLine = getSourceLine(m_line),
+                          .line = m_line,
+                          .col = col});
+    return makeToken(TokenType::Error, "&");
   case '|':
     if (match('|'))
       return makeToken(TokenType::Operator, "||");
-    fatalError(std::nullopt, "expected '||', found '|'", "did you mean '||'?",
-               m_line, startCol);
+    m_bag.emit(Diagnostic{.severity = Severity::Error,
+                          .code = std::nullopt,
+                          .hint = std::string("use '||' for logical or"),
+                          .message = "bitwise '|' is not supported",
+                          .filename = std::string(m_filename),
+                          .sourceLine = getSourceLine(m_line),
+                          .line = m_line,
+                          .col = col});
+    return makeToken(TokenType::Error, "|");
   case '(':
     return makeToken(TokenType::Delimiter, "(");
   case ')':
@@ -259,9 +310,18 @@ Token Lexer::scanOperatorOrDelimiter(uint32_t startCol) {
   case ';':
     return makeToken(TokenType::Semicolon, ";");
   default:
-    fatalError(std::nullopt, std::string("unexpected character '") + c + '\'',
-               "check for stray punctuation or copy-paste artifacts", m_line,
-               startCol);
+    m_bag.emit(Diagnostic{
+        .severity = Severity::Error,
+        .code = std::nullopt,
+        .hint =
+            std::string("check for stray punctuation or copy-paste artifacts"),
+        .message = std::string("unexpected character '") + c + '\'',
+        .filename = std::string(m_filename),
+        .sourceLine = getSourceLine(m_line),
+        .line = m_line,
+        .col = col,
+    });
+    return makeToken(TokenType::Error, std::string(1, c));
   }
 }
 
@@ -279,6 +339,11 @@ std::vector<Token> Lexer::tokenize() {
       break;
     }
 
+    if (needsSemicolonBefore(peek())) {
+      tokens.push_back(makeToken(TokenType::Semicolon, ";"));
+      m_last = TokenType::Semicolon;
+    }
+
     uint32_t startCol = m_col;
     char c = advance();
     Token tok = [&]() -> Token {
@@ -290,6 +355,18 @@ std::vector<Token> Lexer::tokenize() {
         return scanIdentifierOrKeyword();
       return scanOperatorOrDelimiter(startCol);
     }();
+
+    if (tok.type == TokenType::Delimiter) {
+      char v = tok.value[0];
+      if (v == '(')
+        ++m_parenDepth;
+      else if (v == ')')
+        --m_parenDepth;
+      else if (v == '{')
+        ++m_braceDepth;
+      else if (v == '}')
+        --m_braceDepth;
+    }
 
     tok.column = startCol;
     m_last = effectiveLastType(tok);

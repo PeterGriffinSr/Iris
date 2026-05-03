@@ -1,7 +1,7 @@
 #pragma once
 
-#include "error_codes.hpp"
-#include <cstdint>
+#include "src/include/error_codes.hpp"
+#include "src/include/options.hpp"
 #include <optional>
 #include <string>
 
@@ -15,7 +15,26 @@ struct Diagnostic {
   uint32_t line, col;
 };
 
+class DiagnosticBag {
+public:
+  explicit DiagnosticBag(const CompilerOptions &opts) : m_opts(opts) {}
+
+  void emit(const Diagnostic &diag);
+
+  void printSummary() const;
+
+  bool hasErrors() const noexcept;
+  bool limitReached() const noexcept;
+
+  uint32_t errorCount() const noexcept { return m_errors; };
+  uint32_t warningCount() const noexcept { return m_warnings; };
+
+private:
+  const CompilerOptions &m_opts;
+  uint32_t m_errors = 0, m_warnings = 0;
+};
+
 [[noreturn]] void emitFatal(const Diagnostic &diag);
-void emit(const Diagnostic &diag);
+void emitDirect(const Diagnostic &diag);
 
 bool explainError(uint32_t code);

@@ -1,11 +1,7 @@
 #include "src/include/error.hpp"
 #include "error_docs.hpp"
-#include <cstdio>
-#include <cstdlib>
 #include <iomanip>
 #include <iostream>
-#include <sstream>
-#include <string>
 
 namespace {
 
@@ -81,14 +77,67 @@ FILE *openPager() {
 #endif
 }
 
+std::string plural(uint32_t n, std::string_view word) {
+  return std::to_string(n) + ' ' + std::string(word) + (n == 1 ? "" : "s");
+}
+
 } // namespace
 
-void emit(const Diagnostic &diag) { printDiagnostic(diag); }
+void DiagnosticBag::emit(const Diagnostic &diag) {
+  printDiagnostic(diag);
+
+  const bool countsAsError =
+      diag.severity == Severity::Error ||
+      (diag.severity == Severity::Warning && m_opts.werror);
+
+  if (countsAsError)
+    ++m_errors;
+  else if (diag.severity == Severity::Warning)
+    ++m_warnings;
+
+  if (m_opts.maxErrors > 0 && m_errors >= m_opts.maxErrors) {
+    emitFatal(Diagnostic{
+        .severity = Severity::Error,
+        .code = std::nullopt,
+        .hint = std::string("use --max-errors to raise the limit, "
+                            "or 0 to disable it entirely"),
+        .message = "too many errors (" + std::to_string(m_errors) +
+                   "); stopping compilation",
+        .filename = diag.filename,
+        .sourceLine = {},
+        .line = 0,
+        .col = 0,
+    });
+  }
+}
+
+void DiagnosticBag::printSummary() const {
+  if (m_errors == 0 && m_warnings == 0)
+    return;
+
+  std::cerr << '\n';
+
+  if (m_errors > 0 && m_warnings > 0)
+    std::cerr << plural(m_errors, "error") << ", "
+              << plural(m_warnings, "warning") << " generated.\n";
+  else if (m_errors > 0)
+    std::cerr << plural(m_errors, "error") << " generated.\n";
+  else
+    std::cerr << plural(m_warnings, "warning") << " generated.\n";
+}
+
+bool DiagnosticBag::hasErrors() const noexcept { return m_errors > 0; }
+
+bool DiagnosticBag::limitReached() const noexcept {
+  return m_opts.maxErrors > 0 && m_errors >= m_opts.maxErrors;
+}
 
 [[noreturn]] void emitFatal(const Diagnostic &diag) {
   printDiagnostic(diag);
   std::exit(1);
 }
+
+void emitDirect(const Diagnostic &diag) { printDiagnostic(diag); }
 
 bool explainError(uint32_t code) {
   std::string_view text = lookupErrorDoc(code);

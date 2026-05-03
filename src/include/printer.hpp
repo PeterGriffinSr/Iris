@@ -2,7 +2,6 @@
 
 #include "src/include/token.hpp"
 #include <span>
-#include <string_view>
 
 [[nodiscard]] std::string_view tokenTypeName(TokenType type) noexcept;
 void printToken(const Token &tok);

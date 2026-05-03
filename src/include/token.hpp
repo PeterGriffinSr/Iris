@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+
 enum class TokenType {
   Keyword,
   Number,

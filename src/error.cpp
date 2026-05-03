@@ -1,5 +1,6 @@
 #include "src/include/error.hpp"
 #include "error_docs.hpp"
+#include <sstream>
 #include <iomanip>
 #include <iostream>
 

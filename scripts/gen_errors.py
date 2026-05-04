@@ -53,7 +53,6 @@ def generate(entries: list[tuple[int, str]]) -> str:
     lines += [
         "}};",
         "",
-        "// Entries are sorted by code, so we can binary-search at compile time.",
         "inline constexpr std::string_view lookupErrorDoc(unsigned int code) noexcept {",
         "  auto it = std::lower_bound(",
         "    k_errorDocs.begin(), k_errorDocs.end(), code,",

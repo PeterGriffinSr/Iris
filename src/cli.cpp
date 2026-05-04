@@ -1,5 +1,7 @@
 #include "src/include/cli.hpp"
+#include "src/include/error.hpp"
 #include "src/include/lexer.hpp"
+#include "src/include/parser.hpp"
 #include "src/include/printer.hpp"
 #include "version.hpp"
 #include <charconv>
@@ -64,11 +66,17 @@ int runFile(std::string_view path, const CompilerOptions &opts) {
   auto tokens = lexer.tokenize();
 
   bag.printSummary();
-
   if (bag.hasErrors())
     return 1;
 
-  printTokens(tokens);
+  Parser parser(tokens, path, source, bag);
+  auto ast = parser.parse();
+
+  bag.printSummary();
+  if (bag.hasErrors())
+    return 1;
+
+  printAst(ast);
   return 0;
 }
 

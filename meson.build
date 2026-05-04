@@ -32,6 +32,7 @@ sources = files(
     'src/error.cpp',
     'src/lexer.cpp',
     'src/main.cpp',
+    'src/parser.cpp',
     'src/printer.cpp',
 )
 

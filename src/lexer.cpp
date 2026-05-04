@@ -1,4 +1,6 @@
 #include "src/include/lexer.hpp"
+#include "src/include/error.hpp"
+#include "src/include/utils.hpp"
 #include <unordered_map>
 #include <unordered_set>
 
@@ -54,21 +56,6 @@ Token Lexer::makeToken(TokenType type, std::string value, Span span) const {
   return Token{type, std::move(value), span};
 }
 
-std::string Lexer::getSourceLine(uint32_t lineNum) const {
-  uint32_t current = 1;
-  for (size_t i = 0; i < m_source.size(); ++i) {
-    if (current == lineNum) {
-      size_t end = m_source.find('\n', i);
-      if (end == std::string_view::npos)
-        end = m_source.size();
-      return std::string(m_source.substr(i, end - i));
-    }
-    if (m_source[i] == '\n')
-      ++current;
-  }
-  return {};
-}
-
 [[noreturn]] void Lexer::fatalError(std::optional<Error> code, std::string msg,
                                     std::optional<std::string> hint,
                                     Span span) const {
@@ -78,7 +65,7 @@ std::string Lexer::getSourceLine(uint32_t lineNum) const {
       .hint = std::move(hint),
       .message = std::move(msg),
       .filename = std::string(m_filename),
-      .sourceLine = getSourceLine(span.startLine),
+      .sourceLine = getSourceLine(m_source, span.startLine),
       .span = span,
   });
 }
@@ -101,7 +88,11 @@ bool Lexer::needsSemicolonBefore(char next) const noexcept {
   case TokenType::Identifier:
   case TokenType::Number:
   case TokenType::String:
+    break;
   case TokenType::Delimiter:
+
+    if (m_lastValue != ")" && m_lastValue != "]")
+      return false;
     break;
   default:
     return false;
@@ -148,6 +139,7 @@ void Lexer::skipWhitespaceAndComments(std::vector<Token> &out) {
         Span sp{m_line, m_col, m_line, m_col};
         out.push_back(makeToken(TokenType::Semicolon, ";", sp));
         m_last = TokenType::Semicolon;
+        m_lastValue = ";";
       }
       advance();
     } else if (c == ' ' || c == '\r' || c == '\t') {
@@ -287,7 +279,7 @@ Token Lexer::scanOperatorOrDelimiter(uint32_t startLine, uint32_t startCol) {
         .hint = std::string("use '&&' for logical and"),
         .message = "bitwise '&' is not supported",
         .filename = std::string(m_filename),
-        .sourceLine = getSourceLine(m_line),
+        .sourceLine = getSourceLine(m_source, m_line),
         .span = makeSpan(startLine, startCol),
     });
     return makeToken(TokenType::Error, "&", makeSpan(startLine, startCol));
@@ -302,7 +294,7 @@ Token Lexer::scanOperatorOrDelimiter(uint32_t startLine, uint32_t startCol) {
         .hint = std::string("use '||' for logical or"),
         .message = "bitwise '|' is not supported",
         .filename = std::string(m_filename),
-        .sourceLine = getSourceLine(m_line),
+        .sourceLine = getSourceLine(m_source, m_line),
         .span = makeSpan(startLine, startCol),
     });
     return makeToken(TokenType::Error, "|", makeSpan(startLine, startCol));
@@ -334,7 +326,7 @@ Token Lexer::scanOperatorOrDelimiter(uint32_t startLine, uint32_t startCol) {
             std::string("check for stray punctuation or copy-paste artifacts"),
         .message = std::string("unexpected character '") + c + '\'',
         .filename = std::string(m_filename),
-        .sourceLine = getSourceLine(m_line),
+        .sourceLine = getSourceLine(m_source, m_line),
         .span = makeSpan(startLine, startCol),
     });
     return makeToken(TokenType::Error, std::string(1, c),
@@ -392,6 +384,7 @@ std::vector<Token> Lexer::tokenize() {
     }
 
     m_last = effectiveLastType(tok);
+    m_lastValue = tok.value;
     tokens.push_back(std::move(tok));
   }
 

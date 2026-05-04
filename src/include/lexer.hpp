@@ -1,8 +1,11 @@
 #pragma once
 
-#include "src/include/error.hpp"
+#include "src/include/error_codes.hpp"
 #include "src/include/token.hpp"
+#include <optional>
 #include <vector>
+
+class DiagnosticBag;
 
 class Lexer {
 public:
@@ -12,6 +15,7 @@ public:
   std::vector<Token> tokenize();
 
 private:
+  std::string m_lastValue;
   std::string_view m_source, m_filename;
   size_t m_pos{0};
   uint32_t m_line{1}, m_col{1};
@@ -28,7 +32,6 @@ private:
                                 Span span) const;
   [[nodiscard]] Span makeSpan(uint32_t startLine,
                               uint32_t startCol) const noexcept;
-  [[nodiscard]] std::string getSourceLine(uint32_t lineNum) const;
   [[noreturn]] void fatalError(std::optional<Error> code, std::string msg,
                                std::optional<std::string> hint,
                                Span span) const;

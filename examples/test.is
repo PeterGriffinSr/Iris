@@ -1,0 +1,125 @@
+let num = 42
+let float = 3.14
+let sci = 1e10
+let str = "hello world"
+let yes = true
+let no = false
+
+let math = 1 + 2 * 3 - 4 / 2 % 3
+let power = 2 ^ 10
+let rightassoc = 2 ^ 3 ^ 2
+
+let neg = -42
+let negfloat = -3.14
+let not = !true
+let doubleneg = --1
+let doublenot = !!false
+
+let eq = 1 == 1
+let neq = 1 != 2
+let lt = 1 < 2
+let lte = 1 <= 1
+let gt = 2 > 1
+let gte = 2 >= 2
+
+let and = true && false
+let or = true || false
+let complex = true && false || true
+
+let grouped = (1 + 2) * 3
+let nestedgroup = ((1 + 2) * (3 - 4))
+
+let escaped = "hello\nworld"
+let tab = "col1\tcol2"
+let quote = "say \"hi\""
+
+let guard = if true { 1 }
+
+let branch = if true { 1 } else { 2 }
+
+let nested = if true {
+    if false { 1 } else { 2 }
+} else {
+    3
+}
+
+let condcheck = if 1 + 1 == 2 { true } else { false }
+
+let greet() {
+    "hello"
+}
+
+let double(x) {
+    x * 2
+}
+
+let add(a, b) {
+    a + b
+}
+
+let fib(n) {
+    if n <= 1 {
+        n
+    } else {
+        fib(n - 1) + fib(n - 2)
+    }
+}
+
+let ping(n) {
+    if n == 0 { true } else { pong(n - 1) }
+}
+
+let pong(n) {
+    if n == 0 { false } else { ping(n - 1) }
+}
+
+let multiblock(x) {
+    let a = x + 1
+    let b = a * 2
+    b - 1
+}
+
+let result = add(double(2), fib(5))
+
+let apply(f, x) {
+    f(x)
+}
+
+let deep = ((2 + 3) * (4 - 1)) ^ 2 + (10 / 2) * 3 - 1
+
+let boolexpr = !false && true || !true && false
+
+let mixed = 1 + 2 * 3 == 7 && 4 - 1 != 0
+
+let fibten = fib(10)
+let fibten2 = add(fib(5), fib(5))
+
+let shadow(x) {
+    let x = x + 1
+    x
+}
+
+let clamp(x, lo, hi) {
+    if x < lo {
+        lo
+    } else {
+        if x > hi { hi } else { x }
+    }
+}
+
+let greeting(name) {
+    "hello"
+}
+
+let msg = greet()
+
+let chained = double(double(double(1)))
+
+let negarg = double(-5)
+
+let notcond = if !false { 1 } else { 0 }
+
+let a = 1
+let b = a + 1
+let c = b * 2
+let d = c - a

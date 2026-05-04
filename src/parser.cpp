@@ -3,7 +3,6 @@
 #include "src/include/error_codes.hpp"
 #include "src/include/utils.hpp"
 #include <cassert>
-#include <charconv>
 
 Parser::Parser(std::span<const Token> tokens, std::string_view filename,
                std::string_view source, DiagnosticBag &bag)
@@ -377,8 +376,7 @@ ExprPtr Parser::parsePrimary() {
   if (tok.type == TokenType::Number) {
     advance();
     double value = 0.0;
-    std::from_chars(tok.value.data(), tok.value.data() + tok.value.size(),
-                    value);
+    value = std::strtod(tok.value.data(), nullptr);
     return makeExpr(NumericLiteral{.value = value, .span = tok.span});
   }
   if (tok.type == TokenType::String) {

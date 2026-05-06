@@ -1,8 +1,12 @@
 #include "src/include/parser.hpp"
+#include "src/include/ast.hpp"
 #include "src/include/error.hpp"
-#include "src/include/error_codes.hpp"
+#include "src/include/token.hpp"
 #include "src/include/utils.hpp"
 #include <cassert>
+#include <optional>
+#include <sstream>
+#include <vector>
 
 Parser::Parser(std::span<const Token> tokens, std::string_view filename,
                std::string_view source, DiagnosticBag &bag)
@@ -136,9 +140,37 @@ BinaryOp Parser::tokenToBinaryOp(std::string_view value) {
 std::vector<ExprPtr> Parser::parse() {
   std::vector<ExprPtr> exprs;
 
+  if (check(TokenType::Keyword, "package")) {
+    ExprPtr pkg = parsePackage();
+    if (pkg)
+      exprs.push_back(std::move(pkg));
+  }
+
+  while (check(TokenType::Keyword, "import")) {
+    ExprPtr import = parseImport();
+    if (import)
+      exprs.push_back(std::move(import));
+  }
+
   while (!atEnd()) {
     if (match(TokenType::Semicolon))
       continue;
+
+    if (check(TokenType::Keyword, "package")) {
+      emitError("'package' must appear at the top of the file", std::nullopt,
+                peek().span, std::nullopt);
+      advance();
+      synchronize();
+      continue;
+    }
+    if (check(TokenType::Keyword, "import")) {
+      emitError(
+          "'import' declarations must appear before any other expressions",
+          std::nullopt, peek().span, std::nullopt);
+      advance();
+      synchronize();
+      continue;
+    }
 
     ExprPtr e = parseExpr();
     if (e)
@@ -169,6 +201,7 @@ ExprPtr Parser::parseLet() {
         peek().span, ParserError::ExpectedIdentifierAfterLet);
     return nullptr;
   }
+
   const Token &nameTok = advance();
   std::string name = nameTok.value;
 
@@ -203,17 +236,20 @@ ExprPtr Parser::parseLet() {
     Block body = parseBlock();
     Span lambdaSpan = Span::merge(paramStart, body.span);
 
+    std::vector<Param> paramList;
+    paramList.reserve(params.size());
+    for (std::string &p : params)
+      paramList.push_back(Param{.name = std::move(p)});
+
     auto lambda = makeExpr(Lambda{
-        .params = std::move(params),
+        .params = std::move(paramList),
         .body = std::move(body),
         .span = lambdaSpan,
     });
 
-    return makeExpr(Let{
-        .name = std::move(name),
-        .value = std::move(lambda),
-        .span = Span::merge(letSpan, lambdaSpan),
-    });
+    return makeExpr(Let{.name = std::move(name),
+                        .value = std::move(lambda),
+                        .span = Span::merge(letSpan, lambdaSpan)});
   }
 
   expect(TokenType::Operator, "=", "expected '=' after name in let binding",
@@ -224,8 +260,8 @@ ExprPtr Parser::parseLet() {
     return nullptr;
 
   match(TokenType::Semicolon);
-
   Span fullSpan = Span::merge(letSpan, spanOf(*value));
+
   return makeExpr(Let{
       .name = std::move(name),
       .value = std::move(value),
@@ -342,29 +378,45 @@ ExprPtr Parser::parseCall() {
   if (!expr)
     return nullptr;
 
-  while (match(TokenType::Delimiter, "(")) {
-    std::vector<ExprPtr> args;
-
-    if (!check(TokenType::Delimiter, ")")) {
-      do {
-        ExprPtr arg = parseExpr();
-        if (!arg) {
-          synchronize();
-          return nullptr;
-        }
-        args.push_back(std::move(arg));
-      } while (match(TokenType::Delimiter, ","));
+  while (true) {
+    if (match(TokenType::Delimiter, "(")) {
+      std::vector<ExprPtr> args;
+      if (!check(TokenType::Delimiter, ")")) {
+        do {
+          ExprPtr arg = parseExpr();
+          if (!arg) {
+            synchronize();
+            return nullptr;
+          }
+          args.push_back(std::move(arg));
+        } while (match(TokenType::Delimiter, ","));
+      }
+      expect(TokenType::Delimiter, ")", "expected ')' after argument list",
+             ParserError::ExpectedClosingCallParen);
+      Span callSpan = Span::merge(spanOf(*expr), previous().span);
+      expr = makeExpr(Call{
+          .callee = std::move(expr),
+          .args = std::move(args),
+          .span = callSpan,
+      });
+    } else if (check(TokenType::Operator, ".")) {
+      advance();
+      if (!check(TokenType::Identifier)) {
+        emitError("expected field name after '.'",
+                  std::string("write: <expr>.<name>"), peek().span,
+                  std::nullopt);
+        return nullptr;
+      }
+      const Token &field = advance();
+      Span faSpan = Span::merge(spanOf(*expr), field.span);
+      expr = makeExpr(FieldAccess{
+          .object = std::move(expr),
+          .field = field.value,
+          .span = faSpan,
+      });
+    } else {
+      break;
     }
-
-    expect(TokenType::Delimiter, ")", "expected ')' after argument list",
-           ParserError::ExpectedClosingCallParen);
-    Span callSpan = Span::merge(spanOf(*expr), previous().span);
-
-    expr = makeExpr(Call{
-        .callee = std::move(expr),
-        .args = std::move(args),
-        .span = callSpan,
-    });
   }
 
   return expr;
@@ -450,4 +502,78 @@ Block Parser::parseBlock() {
   }
 
   return Block{.exprs = std::move(exprs), .span = blockSpan};
+}
+
+ExprPtr Parser::parsePackage() {
+  const Token &kwTok = advance();
+  if (!check(TokenType::Identifier)) {
+    emitError("expected package name after 'package'",
+              std::string("write: package <name>"), peek().span,
+              ParserError::ExpectedIdentifierAfterLet);
+    return nullptr;
+  }
+
+  const Token &nameTok = advance();
+  match(TokenType::Semicolon);
+
+  return makeExpr(Package{
+      .name = nameTok.value,
+      .span = Span::merge(kwTok.span, nameTok.span),
+  });
+}
+
+ExprPtr Parser::parseImport() {
+  const Token &kwTok = advance();
+
+  if (!check(TokenType::String)) {
+    emitError("expected string after 'import'",
+              std::string("write: import \"collection:path\""), peek().span,
+              std::nullopt);
+    return nullptr;
+  }
+
+  const Token &strTok = advance();
+  std::string raw = strTok.value;
+
+  auto colonPos = raw.find(':');
+  if (colonPos == std::string::npos) {
+    emitError(
+        "invalid import path '" + raw + "'",
+        std::string("import paths must have the form \"collection:path\""),
+        strTok.span, std::nullopt);
+    return nullptr;
+  }
+
+  std::string collection = raw.substr(0, colonPos);
+  std::string pathStr = raw.substr(colonPos + 1);
+
+  if (collection.empty() || pathStr.empty()) {
+    emitError("invalid import path '" + raw + "'",
+              std::string("collection and path must both be non-empty"),
+              strTok.span, std::nullopt);
+    return nullptr;
+  }
+
+  std::vector<std::string> segments;
+  std::istringstream ss(pathStr);
+  std::string seg;
+  while (std::getline(ss, seg, '/')) {
+    if (seg.empty()) {
+      emitError("invalid import path '" + raw + "'",
+                std::string("path segments must not be empty"), strTok.span,
+                std::nullopt);
+      return nullptr;
+    }
+    segments.push_back(seg);
+  }
+
+  std::string localName = segments.back();
+  match(TokenType::Semicolon);
+
+  return makeExpr(Import{
+      .collection = std::move(collection),
+      .pathSegments = std::move(segments),
+      .localName = std::move(localName),
+      .span = Span::merge(kwTok.span, strTok.span),
+  });
 }

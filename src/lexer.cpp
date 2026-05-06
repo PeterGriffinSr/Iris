@@ -1,5 +1,6 @@
 #include "src/include/lexer.hpp"
 #include "src/include/error.hpp"
+#include "src/include/token.hpp"
 #include "src/include/utils.hpp"
 #include <unordered_map>
 #include <unordered_set>
@@ -7,11 +8,11 @@
 static const std::unordered_map<std::string, TokenType> s_keywords = {
     {"let", TokenType::Keyword},   {"if", TokenType::Keyword},
     {"else", TokenType::Keyword},  {"true", TokenType::Keyword},
-    {"false", TokenType::Keyword},
-};
+    {"false", TokenType::Keyword}, {"package", TokenType::Keyword},
+    {"import", TokenType::Keyword}};
 
-static const std::unordered_set<std::string> s_openingKeywords = {"let", "if",
-                                                                  "else"};
+static const std::unordered_set<std::string> s_openingKeywords = {
+    "let", "if", "else", "package", "import"};
 
 Lexer::Lexer(std::string_view source, std::string_view filename,
              DiagnosticBag &bag)

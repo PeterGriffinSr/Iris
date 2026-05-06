@@ -26,9 +26,24 @@ enum class ParserError : uint32_t {
   EmptyBlock = 214,
 };
 
-enum class ResolutionError : uint32_t {};
+enum class ResolutionError : uint32_t {
+  UndefinedName = 300,
+  EmptyProgram = 301,
+};
+
 enum class TypeError : uint32_t {};
-enum class RuntimeError : uint32_t {};
+
+enum class RuntimeError : uint32_t {
+  TooManyConstants = 400,
+  TooManyLocals = 401,
+  ArityMismatch = 402,
+  NotCallable = 403,
+  TypeError = 404,
+  StackOverflow = 405,
+  DivisionByZero = 406,
+  Panic = 407,
+};
+
 enum class IOError : uint32_t {
   FileNotFound = 100,
   FileUnreadable = 101,

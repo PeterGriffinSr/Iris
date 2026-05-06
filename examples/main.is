@@ -1,1 +1,3 @@
-let x = "10"
+import "core:testing/hope"
+
+hope.assert(1 == 2, "test fail")

@@ -46,6 +46,8 @@ private:
   ExprPtr parseUnary();
   ExprPtr parseCall();
   ExprPtr parsePrimary();
+  ExprPtr parsePackage();
+  ExprPtr parseImport();
   Block parseBlock();
 
   struct OpInfo {

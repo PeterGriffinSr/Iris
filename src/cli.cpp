@@ -1,8 +1,12 @@
 #include "src/include/cli.hpp"
+#include "src/include/builtins.hpp"
+#include "src/include/compiler.hpp"
 #include "src/include/error.hpp"
 #include "src/include/lexer.hpp"
+#include "src/include/module.hpp"
 #include "src/include/parser.hpp"
-#include "src/include/printer.hpp"
+#include "src/include/resolver.hpp"
+#include "src/include/vm.hpp"
 #include "version.hpp"
 #include <charconv>
 #include <fstream>
@@ -42,6 +46,17 @@ int runExplain(std::string_view code) {
                                                                             : 1;
 }
 
+struct Injection {
+  uint32_t idx;
+  std::string name;
+  Value value;
+};
+
+struct BuiltinReg {
+  uint32_t idx;
+  std::string name;
+};
+
 int runFile(std::string_view path, const CompilerOptions &opts) {
   std::ifstream file{std::string(path)};
   if (!file) {
@@ -76,7 +91,57 @@ int runFile(std::string_view path, const CompilerOptions &opts) {
   if (bag.hasErrors())
     return 1;
 
-  printAst(ast);
+  std::filesystem::path filePath(path);
+
+  ModuleLoader loader(opts, bag);
+  auto packages = loader.loadImports(ast, filePath);
+
+  Resolver resolver(path, source, bag);
+
+  std::vector<BuiltinReg> builtinRegs;
+  for (const std::string &name : kBuiltinNames) {
+    uint32_t idx = resolver.declareExternal(name);
+    builtinRegs.push_back({idx, name});
+  }
+
+  std::vector<Injection> injections;
+  for (const LoadedPackage &pkg : packages) {
+    auto fields = std::make_shared<std::unordered_map<std::string, Value>>();
+    for (const ExportedBinding &b : pkg.exports)
+      (*fields)[b.name] = b.value;
+
+    auto ns = std::make_shared<Namespace>(Namespace{fields});
+    uint32_t idx = resolver.declareExternal(pkg.localName);
+    injections.push_back({idx, pkg.localName, Value{std::move(ns)}});
+  }
+
+  resolver.resolve(ast);
+
+  bag.printSummary();
+  if (bag.hasErrors())
+    return 1;
+
+  Compiler compiler(path, source, bag);
+
+  for (const auto &b : builtinRegs)
+    compiler.registerBuiltin(b.idx, b.name);
+
+  for (auto &inj : injections)
+    compiler.injectExternal(inj.idx, inj.name, inj.value);
+
+  auto chunk = compiler.compile(ast);
+
+  bag.printSummary();
+  if (bag.hasErrors())
+    return 1;
+
+  VM vm(path, source, bag);
+  auto result = vm.run(chunk);
+
+  bag.printSummary();
+  if (bag.hasErrors())
+    return 1;
+
   return 0;
 }
 

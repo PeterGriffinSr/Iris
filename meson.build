@@ -28,12 +28,17 @@ error_docs = custom_target(
 )
 
 sources = files(
+    'src/module.cpp',
+    'src/vm.cpp',
     'src/cli.cpp',
+    'src/compiler.cpp',
     'src/error.cpp',
     'src/lexer.cpp',
     'src/main.cpp',
     'src/parser.cpp',
     'src/printer.cpp',
+    'src/resolver.cpp',
+    'src/value.cpp',
 )
 
 executable(

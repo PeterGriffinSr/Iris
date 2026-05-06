@@ -1,5 +1,6 @@
 #pragma once
 
+#include "src/include/resolved_info.hpp"
 #include "src/include/span.hpp"
 #include <memory>
 #include <optional>
@@ -46,6 +47,7 @@ struct BoolLiteral {
 struct Identifier {
   std::string name;
   Span span;
+  std::optional<ResolvedInfo> resolved = std::nullopt;
 };
 
 struct Unary {
@@ -79,8 +81,13 @@ struct Call {
   Span span;
 };
 
+struct Param {
+  std::string name;
+  uint32_t bindingIndex{0};
+};
+
 struct Lambda {
-  std::vector<std::string> params;
+  std::vector<Param> params;
   Block body;
   Span span;
 };
@@ -89,14 +96,34 @@ struct Let {
   std::string name;
   ExprPtr value;
   Span span;
+  std::optional<ResolvedInfo> resolved = std::nullopt;
 };
 
-using ExprVariant =
-    std::variant<NumericLiteral, StringLiteral, BoolLiteral, Identifier, Unary,
-                 Binary, If, Call, Block, Let, Lambda>;
+struct Package {
+  std::string name;
+  Span span;
+};
+
+struct Import {
+  std::string collection;
+  std::vector<std::string> pathSegments;
+  std::string localName;
+  Span span;
+};
+
+struct FieldAccess {
+  ExprPtr object;
+  std::string field;
+  Span span;
+};
+
+using ExprVariant = std::variant<NumericLiteral, StringLiteral, BoolLiteral,
+                                 Identifier, Unary, Binary, If, Call, Block,
+                                 Let, Lambda, Package, Import, FieldAccess>;
 
 struct Expr {
   ExprVariant val;
+
   template <typename T> Expr(T &&node) : val(std::forward<T>(node)) {}
 };
 

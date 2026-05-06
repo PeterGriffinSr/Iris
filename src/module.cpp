@@ -101,7 +101,7 @@ ModuleLoader::loadImports(std::span<const ExprPtr> program,
                               "/' in one of the module search paths, "
                               "or set IRIS_MODULE_PATH"),
           .message = "package '" + key + "' not found",
-          .filename = std::string(importingFile),
+          .filename = importingFile.string(),
           .sourceLine = {},
           .span = imp->span,
       });

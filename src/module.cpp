@@ -128,7 +128,7 @@ ModuleLoader::loadPackage(const std::string &key, const std::string &localName,
         .code = std::nullopt,
         .hint = std::string("circular imports are not allowed"),
         .message = "circular import detected for package '" + key + "'",
-        .filename = std::string(importingFile),
+        .filename = importingFile.string(),
         .sourceLine = {},
         .span = {0, 0, 0, 0},
     });

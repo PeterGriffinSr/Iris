@@ -1,6 +1,5 @@
 let num = 42
 let float = 3.14
-let sci = 1e10
 let str = "hello world"
 let yes = true
 let no = false

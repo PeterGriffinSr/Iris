@@ -1,6 +1,2 @@
 # Build outputs
-build/
-.cache/
-
-# Generated docs
-html/
+dist-newstyle/

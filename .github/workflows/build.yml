@@ -20,16 +20,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up GHC
+        uses: haskell-actions/setup@v2
         with:
-          python-version: '3.x'
+          ghc-version: '9.6'
+          cabal-version: 'latest'
 
-      - name: Install Meson & Ninja
-        run: pip install meson ninja
-
-      - name: Configure
-        run: meson setup build --buildtype=release
+      - name: Install dependencies
+        run: cabal build --only-dependencies
 
       - name: Build
-        run: meson compile -C build
+        run: cabal build

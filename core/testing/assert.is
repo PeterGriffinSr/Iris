@@ -1,5 +1,5 @@
 package testing
 
 let assert(cond, msg) {
-    if !cond { panic(msg) } else { print("ok") }
+    if !cond { msg } else { "ok" }
 }

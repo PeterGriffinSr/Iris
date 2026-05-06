@@ -4,42 +4,19 @@
 
 ### Prerequisites
 
-- C++ compiler (GCC, Clang, or MSVC)
-- Python 3.6+
+- GHC (Glasgow Haskell Compiler): Recommended version 9.2.x or higher.
+- Cabal: The standard build tool for Haskell.
 
 ### Build Steps
 
-1. Install build dependencies:
+1. Build the project:
     ```bash
-    pip install meson ninja
+    cabal build --only-dependencies
     ```
-2. Set up the build directory:
+2. Install:
     ```bash
-    meson setup build --buildtype=release
+    cabal install
     ```
-3. Compile the project:
-    ```bash
-    meson compile -C build
-    ```
-4. Install:
-    ```bash
-    meson install
-    ```
-
-## Usage
-
-Once installed, you can run with:
-```bash
-iris [script.<is/iris>]
-```
-
-## Development
-
-To build in debug mode for development:
-```bash
-meson setup build --buildtype=debug
-meson compile -C build
-```
 
 ## License
 

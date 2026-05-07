@@ -1,20 +1,20 @@
-#include "src/include/cli.hpp"
-#include "src/include/builtins.hpp"
-#include "src/include/compiler.hpp"
-#include "src/include/error.hpp"
-#include "src/include/lexer.hpp"
-#include "src/include/module.hpp"
-#include "src/include/parser.hpp"
-#include "src/include/resolver.hpp"
-#include "src/include/vm.hpp"
-#include "version.hpp"
+#include <Iris/Backend/compiler.hpp>
+#include <Iris/Backend/module.hpp>
+#include <Iris/Common/error.hpp>
+#include <Iris/Frontend/lexer.hpp>
+#include <Iris/Frontend/parser.hpp>
+#include <Iris/Frontend/resolver.hpp>
+#include <Iris/Runtime/builtins.hpp>
+#include <Iris/Runtime/vm.hpp>
+#include <Iris/cli.hpp>
 #include <charconv>
 #include <fstream>
 #include <functional>
 #include <iostream>
 #include <sstream>
+#include <version.hpp>
 
-namespace {
+namespace Iris {
 
 void printUsage() {
   std::cout << "Usage: iris <file>              Run an Iris source file\n"
@@ -42,14 +42,16 @@ int runExplain(std::string_view code) {
     return 1;
   }
 
-  return explainError(static_cast<uint32_t>(std::stoul(std::string(code)))) ? 0
-                                                                            : 1;
+  return Common::explainError(
+             static_cast<uint32_t>(std::stoul(std::string(code))))
+             ? 0
+             : 1;
 }
 
 struct Injection {
   uint32_t idx;
   std::string name;
-  Value value;
+  Runtime::Value value;
 };
 
 struct BuiltinReg {
@@ -60,9 +62,9 @@ struct BuiltinReg {
 int runFile(std::string_view path, const CompilerOptions &opts) {
   std::ifstream file{std::string(path)};
   if (!file) {
-    emitFatal(Diagnostic{
-        .severity = Severity::Error,
-        .code = IOError::FileNotFound,
+    emitFatal(Common::Diagnostic{
+        .severity = Common::Severity::Error,
+        .code = Common::IOError::FileNotFound,
         .hint = std::string("check the path is correct and the file exists"),
         .message = "could not open '" + std::string(path) + "'",
         .filename = std::string(path),
@@ -75,16 +77,16 @@ int runFile(std::string_view path, const CompilerOptions &opts) {
   buf << file.rdbuf();
   std::string source = buf.str();
 
-  DiagnosticBag bag(opts);
+  Common::DiagnosticBag bag(opts);
 
-  Lexer lexer(source, path, bag);
+  Frontend::Lexer lexer(source, path, bag);
   auto tokens = lexer.tokenize();
 
   bag.printSummary();
   if (bag.hasErrors())
     return 1;
 
-  Parser parser(tokens, path, source, bag);
+  Frontend::Parser parser(tokens, path, source, bag);
   auto ast = parser.parse();
 
   bag.printSummary();
@@ -93,26 +95,27 @@ int runFile(std::string_view path, const CompilerOptions &opts) {
 
   std::filesystem::path filePath(path);
 
-  ModuleLoader loader(opts, bag);
+  Backend::ModuleLoader loader(opts, bag);
   auto packages = loader.loadImports(ast, filePath);
 
-  Resolver resolver(path, source, bag);
+  Frontend::Resolver resolver(path, source, bag);
 
   std::vector<BuiltinReg> builtinRegs;
-  for (const std::string &name : kBuiltinNames) {
+  for (const std::string &name : Runtime::kBuiltinNames) {
     uint32_t idx = resolver.declareExternal(name);
     builtinRegs.push_back({idx, name});
   }
 
   std::vector<Injection> injections;
-  for (const LoadedPackage &pkg : packages) {
-    auto fields = std::make_shared<std::unordered_map<std::string, Value>>();
-    for (const ExportedBinding &b : pkg.exports)
+  for (const Backend::LoadedPackage &pkg : packages) {
+    auto fields =
+        std::make_shared<std::unordered_map<std::string, Runtime::Value>>();
+    for (const Backend::ExportedBinding &b : pkg.exports)
       (*fields)[b.name] = b.value;
 
-    auto ns = std::make_shared<Namespace>(Namespace{fields});
+    auto ns = std::make_shared<Runtime::Namespace>(Runtime::Namespace{fields});
     uint32_t idx = resolver.declareExternal(pkg.localName);
-    injections.push_back({idx, pkg.localName, Value{std::move(ns)}});
+    injections.push_back({idx, pkg.localName, Runtime::Value{std::move(ns)}});
   }
 
   resolver.resolve(ast);
@@ -121,7 +124,7 @@ int runFile(std::string_view path, const CompilerOptions &opts) {
   if (bag.hasErrors())
     return 1;
 
-  Compiler compiler(path, source, bag);
+  Backend::Compiler compiler(path, source, bag);
 
   for (const auto &b : builtinRegs)
     compiler.registerBuiltin(b.idx, b.name);
@@ -135,7 +138,7 @@ int runFile(std::string_view path, const CompilerOptions &opts) {
   if (bag.hasErrors())
     return 1;
 
-  VM vm(path, source, bag);
+  Runtime::VM vm(path, source, bag);
   auto result = vm.run(chunk);
 
   bag.printSummary();
@@ -190,8 +193,6 @@ const std::unordered_map<std::string_view, Flag> k_flags = {
       }}},
 };
 
-} // namespace
-
 int runCli(int argc, char *argv[]) {
   if (argc < 2) {
     printUsage();
@@ -242,3 +243,4 @@ int runCli(int argc, char *argv[]) {
 
   return runFile(file, opts);
 }
+} // namespace Iris

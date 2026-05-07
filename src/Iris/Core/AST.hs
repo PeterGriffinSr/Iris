@@ -1,7 +1,7 @@
-module Iris.Core.AST (BinOp (..), UnOp (..), Expr (..)) where
+module Iris.Core.AST (BinOp (..), UnOp (..), Expr, ExprNode (..)) where
 
 import Data.Text (Text)
-import Iris.Common.Span (Span)
+import Iris.Common.Span (Spanned)
 
 data BinOp
   = Add
@@ -23,19 +23,21 @@ data BinOp
 data UnOp = Neg | Not
   deriving (Show, Eq)
 
-data Expr
-  = Num Double Span
-  | Str Text Span
-  | Bool Bool Span
-  | Var Text Span
-  | Unary UnOp Expr Span
-  | Binary BinOp Expr Expr Span
-  | If Expr [Expr] (Maybe [Expr]) Span
-  | Call Expr [Expr] Span
-  | Lambda [Text] [Expr] Span
-  | Let Text Expr Span
-  | Field Expr Text Span
-  | Block [Expr] Span
-  | Package Text Span
-  | Import Text [Text] Span
+type Expr = Spanned ExprNode
+
+data ExprNode
+  = Num Double
+  | Str Text
+  | Bool Bool
+  | Var Text
+  | Unary UnOp Expr
+  | Binary BinOp Expr Expr
+  | If Expr [Expr] (Maybe [Expr])
+  | Call Expr [Expr]
+  | Lambda [Text] [Expr]
+  | Let Text Expr
+  | Func Text [Text] [Expr]
+  | Field Expr Text
+  | Package Text
+  | Import Text [Text]
   deriving (Show, Eq)

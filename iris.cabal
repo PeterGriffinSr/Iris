@@ -26,11 +26,6 @@ library
   other-modules:
     Iris.Common.Span
     Iris.Core.AST
-    Iris.Core.Infer
-    Iris.Core.Loader
-    Iris.Core.Module
-    Iris.Core.Types
-    Iris.Core.Unify
     Iris.Frontend.Lexer
     Iris.Frontend.Parser
     Iris.Frontend.Token
@@ -48,6 +43,7 @@ library
     , parser-combinators
     , text
     , unordered-containers
+    , transformers
 
 executable iris
   import:           warnings

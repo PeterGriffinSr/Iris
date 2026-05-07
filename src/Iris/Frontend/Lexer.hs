@@ -2,72 +2,54 @@
 
 module Iris.Frontend.Lexer (tokenize) where
 
-import Data.Bifunctor (bimap)
+import Data.Bifunctor (first)
 import Data.Char (isAlphaNum, isDigit)
-import Data.HashSet (HashSet, fromList, member)
+import Data.HashSet (fromList, member)
 import Data.Text (Text, pack)
 import Data.Void (Void)
 import Iris.Common.Span (Span (..), Spanned (..))
 import Iris.Frontend.Token (Tok (..), TokenStream (..))
 import Text.Megaparsec
-  ( MonadParsec (eof, takeWhile1P, try),
+  ( MonadParsec (eof, notFollowedBy, takeWhile1P, try),
     Parsec,
     choice,
+    empty,
     errorBundlePretty,
     getSourcePos,
     many,
     manyTill,
-    notFollowedBy,
     oneOf,
     optional,
     parse,
-    satisfy,
   )
-import Text.Megaparsec.Char (char, space1, string)
-import Text.Megaparsec.Char.Lexer (charLiteral, skipBlockComment, skipLineComment, space)
-import Prelude hiding (lex)
+import Text.Megaparsec.Char (char, newline, space1, string)
+import Text.Megaparsec.Char.Lexer (charLiteral, skipLineComment, space)
 
-type Lexer = Parsec Void Text
+type Parser = Parsec Void Text
 
-sc :: Lexer ()
-sc = space space1 (skipLineComment "#") (skipBlockComment "#*" "*#")
+spaceConsumer :: Parser ()
+spaceConsumer = space space1 (skipLineComment "#") empty
 
-lexeme :: Lexer a -> Lexer (Spanned a)
-lexeme p = do
+lexical :: Parser a -> Parser (Spanned a)
+lexical parser = do
   start <- getSourcePos
-  v <- p
+  value <- parser
   end <- getSourcePos
-  sc
-  pure $ Spanned (Span start end) v
+  spaceConsumer
+  pure $ Spanned (Span start end) value
 
-keywords :: HashSet Text
-keywords = fromList ["let", "if", "else", "true", "false", "import", "package"]
-
-number :: Lexer Tok
-number = do
-  integral <- takeWhile1P (Just "digit") isDigit
-  fractional <- optional (char '.' *> takeWhile1P (Just "digit") isDigit)
-  notFollowedBy (satisfy (\c -> isDigit c || c == '.'))
-  pure $ Number $ case fractional of
-    Nothing -> integral
-    Just f -> integral <> "." <> f
-
-tok :: Lexer Tok
-tok =
+tokenParser :: Parser Tok
+tokenParser =
   choice
-    [ number,
-      String <$> (char '"' *> (pack <$> manyTill charLiteral (char '"'))),
-      Operator <$> choice (map (try . string) ["==", "!=", "<=", ">=", "&&", "||", "=", "+", "-", "*", "/", "%", "<", ">", "!", "|", "^", "."]),
-      Delimiters . pack . (: []) <$> oneOf ("()[]{}," :: String),
-      identifierOrKeyword
+    [ Number <$> ((\intPart decPart -> intPart <> maybe "" ("." <>) decPart) <$> digits <*> optional (try (char '.' *> digits))) <* notFollowedBy (oneOf ('.' : ['0' .. '9'])),
+      String . pack <$> (char '"' *> manyTill (notFollowedBy newline *> charLiteral) (char '"')),
+      Operator <$> choice (string <$> ["==", "!=", "<=", ">=", "&&", "||", "=", "+", "-", "*", "/", "%", "<", ">", "!", "|", "^", "."]),
+      Delimiters <$> oneOf ("()[]{}," :: [Char]),
+      (\word -> if member word keywords then Keyword word else Identifier word) <$> takeWhile1P (Just "identifier") (\c -> c == '_' || isAlphaNum c)
     ]
   where
-    identifierOrKeyword = do
-      word <- takeWhile1P (Just "ident") (\c -> c == '_' || isAlphaNum c)
-      pure $ if member word keywords then Keyword word else Identifier word
-
-lex :: Lexer [Spanned Tok]
-lex = sc *> many (lexeme tok) <* eof
+    digits = takeWhile1P (Just "digit") isDigit
+    keywords = fromList ["let", "if", "else", "true", "false", "import", "package"]
 
 tokenize :: FilePath -> Text -> Either String TokenStream
-tokenize path src = bimap errorBundlePretty (`TokenStream` src) (parse lex path src)
+tokenize path input = first errorBundlePretty $ (`TokenStream` input) <$> parse (spaceConsumer *> many (lexical tokenParser) <* eof) path input

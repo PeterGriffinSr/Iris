@@ -1,14 +1,14 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 
 module Iris.Frontend.Parser (parse) where
 
-import Control.Monad (void)
 import Control.Monad.Combinators.Expr (Operator (InfixL, InfixN, InfixR), makeExprParser)
-import Data.Text (Text, breakOn, drop, length, null, splitOn, unpack)
+import Data.Text (Text, breakOn, drop, null, splitOn, unpack)
 import Data.Void (Void)
 import Iris.Common.Span (Span (..), Spanned (..))
-import Iris.Core.AST (BinOp (..), Expr (..), UnOp (..))
+import Iris.Core.AST (BinOp (..), Expr, ExprNode (..), UnOp (..))
 import Iris.Frontend.Token (Tok (..), TokenStream (..))
 import Text.Megaparsec
   ( MonadParsec (eof, token),
@@ -23,30 +23,28 @@ import Text.Megaparsec
     (<|>),
   )
 import qualified Text.Megaparsec as MP
-import Prelude hiding (drop, length, null)
+import Text.Read (readMaybe)
+import Prelude hiding (drop, length)
 
 type Parser = Parsec Void TokenStream
 
-getSpan :: Parser Span
-getSpan = (\p -> Span p p) <$> getSourcePos
+matchTokSpan :: (Tok -> Maybe a) -> Parser (a, Span)
+matchTokSpan f = token (\(Spanned s t) -> (,s) <$> f t) mempty
 
-spanned :: Parser (Span -> a) -> Parser a
-spanned p = do
-  s <- getSpan
-  f <- p
-  pure $ f s
+tok :: Tok -> Parser Span
+tok expected = snd <$> matchTokSpan (\t -> if t == expected then Just () else Nothing)
 
-matchTok :: (Tok -> Maybe a) -> Parser a
-matchTok f = token (\(Spanned _ t) -> f t) mempty
-
-tok :: Tok -> Parser ()
-tok t = void $ matchTok (\t' -> if t == t' then Just () else Nothing)
-
-identifier :: Parser Text
-identifier = matchTok $ \case Identifier i -> Just i; _ -> Nothing
+identifier :: Parser (Text, Span)
+identifier = matchTokSpan $ \case Identifier name -> Just name; _ -> Nothing
 
 parseExpr :: Parser Expr
 parseExpr = choice [parseLet, parseIf, exprTable]
+
+binary :: BinOp -> Text -> Parser (Expr -> Expr -> Expr)
+binary op name = do
+  _ <- tok (Operator name)
+  pure $ \lhs@(Spanned (Span sStart _) _) rhs@(Spanned (Span _ rEnd) _) ->
+    Spanned (Span sStart rEnd) (Binary op lhs rhs)
 
 exprTable :: Parser Expr
 exprTable = makeExprParser parseUnary table
@@ -65,102 +63,114 @@ exprTable = makeExprParser parseUnary table
         [InfixL (binary And "&&")],
         [InfixL (binary Or "||")]
       ]
-    binary op name = do
-      tok (Operator name)
-      s <- getSpan
-      pure $ \lhs rhs -> Binary op lhs rhs s
 
 parseUnary :: Parser Expr
 parseUnary =
   choice
-    [ spanned $ do
+    [ do
+        start <- getSourcePos
         op <- (Neg <$ tok (Operator "-")) <|> (Not <$ tok (Operator "!"))
-        inner <- parseUnary
-        pure $ \s -> Unary op inner s,
+        val <- parseUnary
+        pure $ Spanned (Span start (spanEnd (spannedSpan val))) (Unary op val),
       parseCall
     ]
 
 parseCall :: Parser Expr
-parseCall = spanned $ do
-  e <- parsePrimary
+parseCall = do
+  base <- parsePrimary
   ops <-
     many $
       choice
         [ do
-            args <- between (tok (Delimiters "(")) (tok (Delimiters ")")) (parseExpr `sepBy` tok (Delimiters ","))
-            pure $ \s acc -> Call acc args s,
+            _ <- tok (Delimiters '(')
+            args <- parseExpr `sepBy` tok (Delimiters ',')
+            endS <- tok (Delimiters ')')
+            pure $ \acc@(Spanned (Span s _) _) -> Spanned (Span s (spanEnd endS)) (Call acc args),
           do
-            tok (Operator ".")
-            field <- identifier
-            pure $ \s acc -> Field acc field s
+            _ <- tok (Operator ".")
+            (field, fSpan) <- identifier
+            pure $ \acc@(Spanned (Span s _) _) -> Spanned (Span s (spanEnd fSpan)) (Field acc field)
         ]
-  pure $ \s -> foldl (\acc f -> f s acc) e ops
+  pure $ foldl (\acc f -> f acc) base ops
 
 parsePrimary :: Parser Expr
 parsePrimary =
-  spanned $
-    choice
-      [ Num <$> matchTok (\case Number n -> Just (read $ unpack n); _ -> Nothing),
-        Str <$> matchTok (\case String s -> Just s; _ -> Nothing),
-        Var <$> identifier,
-        Bool True <$ tok (Keyword "true"),
-        Bool False <$ tok (Keyword "false"),
-        const <$> between (tok (Delimiters "(")) (tok (Delimiters ")")) parseExpr
-      ]
-
-parseLet :: Parser Expr
-parseLet = spanned $ do
-  tok (Keyword "let")
-  name <- identifier
   choice
     [ do
-        params <- between (tok (Delimiters "(")) (tok (Delimiters ")")) (identifier `sepBy` tok (Delimiters ","))
-        body <- parseBlock
-        pure $ \s -> Let name (Lambda params body s) s,
+        (n, s) <- matchTokSpan (\case Number n -> readMaybe (unpack n); _ -> Nothing)
+        pure $ Spanned s (Num n),
       do
-        tok (Operator "=")
-        Let name <$> parseExpr
+        (t, s) <- matchTokSpan (\case String s -> Just s; _ -> Nothing)
+        pure $ Spanned s (Str t),
+      do
+        (name, s) <- identifier
+        pure $ Spanned s (Var name),
+      (`Spanned` Bool True) <$> tok (Keyword "true"),
+      (`Spanned` Bool False) <$> tok (Keyword "false"),
+      parseParens
+    ]
+
+parseParens :: Parser Expr
+parseParens = do
+  start <- tok (Delimiters '(')
+  val <- parseExpr
+  end <- tok (Delimiters ')')
+  pure $ Spanned (Span (spanStart start) (spanEnd end)) (spannedValue val)
+
+parseLet :: Parser Expr
+parseLet = do
+  start <- tok (Keyword "let")
+  (name, _) <- identifier
+  choice
+    [ do
+        _ <- tok (Delimiters '(')
+        params <- (fst <$> identifier) `sepBy` tok (Delimiters ',')
+        _ <- tok (Delimiters ')')
+        body <- parseBlock
+        let endS = if Prelude.null body then start else spannedSpan (last body)
+        pure $ Spanned (Span (spanStart start) (spanEnd endS)) (Func name params body),
+      do
+        _ <- tok (Operator "=")
+        val <- parseExpr
+        pure $ Spanned (Span (spanStart start) (spanEnd (spannedSpan val))) (Let name val)
     ]
 
 parseIf :: Parser Expr
-parseIf = spanned $ do
-  tok (Keyword "if")
+parseIf = do
+  start <- tok (Keyword "if")
   cond <- parseExpr
   thn <- parseBlock
   els <- optional (tok (Keyword "else") *> parseBlock)
-  pure $ If cond thn els
+  let endS = maybe (if Prelude.null thn then spannedSpan cond else spannedSpan (last thn)) (spannedSpan . last) els
+  pure $ Spanned (Span (spanStart start) (spanEnd endS)) (If cond thn els)
 
 parseBlock :: Parser [Expr]
-parseBlock =
-  between (tok (Delimiters "{")) (tok (Delimiters "}")) $
-    many parseExpr
+parseBlock = between (tok (Delimiters '{')) (tok (Delimiters '}')) (many parseExpr)
 
 parsePackage :: Parser Expr
-parsePackage = spanned $ do
-  tok (Keyword "package")
-  Package <$> identifier
+parsePackage = do
+  start <- tok (Keyword "package")
+  (name, s) <- identifier
+  pure $ Spanned (Span (spanStart start) (spanEnd s)) (Package name)
 
 parseImport :: Parser Expr
-parseImport = spanned $ do
-  tok (Keyword "import")
-  raw <- matchTok (\case String s -> Just s; _ -> Nothing)
-  let (col, rest) = breakOn ":" raw
-  if null col || length rest <= 1
-    then fail "import path must follow 'collection:path' format"
-    else do
-      let path = drop 1 rest
-          segments = splitOn "/" path
-      if "" `elem` segments
-        then fail "import path has empty segment"
-        else pure $ Import raw segments
+parseImport = do
+  start <- tok (Keyword "import")
+  (raw, s) <- matchTokSpan (\case String s -> Just s; _ -> Nothing)
+  let (_, rest) = breakOn ":" raw
+  let segments =
+        if Data.Text.null rest
+          then []
+          else splitOn "/" (drop 1 rest)
+  pure $ Spanned (Span (spanStart start) (spanEnd s)) (Import raw segments)
 
 parse :: FilePath -> TokenStream -> Either String [Expr]
-parse path ts = case MP.parse program path ts of
+parse path tokenStream = case MP.parse (program <* eof) path tokenStream of
   Left err -> Left (errorBundlePretty err)
   Right ast -> Right ast
   where
     program = do
       pkg <- optional parsePackage
       imports <- many parseImport
-      exprs <- many parseExpr <* eof
+      exprs <- many parseExpr
       pure $ maybe [] pure pkg ++ imports ++ exprs

@@ -1,16 +1,16 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TupleSections #-}
 
 module Iris.CLI (run) where
 
-import Data.Map (empty)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Trans.Except (runExceptT, throwE)
 import Data.Maybe (fromMaybe)
 import Data.Text.IO (readFile)
 import Data.Version (showVersion)
-import Iris.Core.AST (Expr (Block))
-import Iris.Core.Infer (Context (Context), infer, runInfer)
-import Iris.Core.Loader (loadDependencies)
+import Iris.Core.AST (Expr)
 import Iris.Frontend.Lexer (tokenize)
 import Iris.Frontend.Parser (parse)
 import Options.Applicative
@@ -36,82 +36,40 @@ import Options.Applicative
 import Paths_iris (version)
 import Prelude hiding (readFile)
 
-data GlobalOptions = GlobalOptions
-  { wError :: Bool,
-    verbose :: Bool
-  }
+data Opts = Opts {wError :: Bool, verbose :: Bool}
 
 data Command
-  = Run FilePath GlobalOptions
-  | Compile FilePath (Maybe FilePath) GlobalOptions
-
-versionString :: String
-versionString = "iris version " ++ showVersion version
+  = Run FilePath Opts
+  | Compile FilePath (Maybe FilePath) Opts
 
 run :: IO ()
 run =
-  execParser opts >>= \case
-    Run path opts' -> runInterpreter path opts'
-    Compile src dest opts' -> runCompiler src dest opts'
-  where
-    opts =
-      info
-        (commandParser <**> helper <**> versionHelper)
-        (fullDesc <> progDesc "Iris: A split programming language")
-    versionHelper = infoOption versionString (long "version" <> help "Show version")
-
-pipeline :: FilePath -> GlobalOptions -> IO (Maybe [Expr])
-pipeline path GlobalOptions {..} = do
-  src <- readFile path
-  case tokenize path src of
-    Left err -> handleFailure "Lexer Error" err
-    Right tokens ->
-      case parse path tokens of
-        Left err -> handleFailure "Parser Error" err
-        Right ast -> do
-          depResult <- loadDependencies ast
-          case depResult of
-            Left err -> handleFailure "Dependency Error" (show err)
-            Right cache -> do
-              let ctx = Context empty cache
-              case runInfer ctx (infer (Block ast (error "Top level span"))) of
-                Left err -> handleFailure "Type Error" (show err)
-                Right _ -> return (Just ast)
-  where
-    handleFailure stage err = do
-      let prefix = if wError then "FATAL [" ++ stage ++ "]: " else stage ++ ": "
-      putStrLn $ prefix ++ err
-      return Nothing
-
-runInterpreter :: FilePath -> GlobalOptions -> IO ()
-runInterpreter path opts = do
-  pipeline path opts >>= \case
-    Just ast -> do
+  execParser (info (parser <**> helper) (fullDesc <> progDesc "Iris: A split programming language")) >>= \case
+    Run path opts -> execute path opts print
+    Compile src out opts -> execute src opts $ \ast -> do
+      let dest = fromMaybe "out.bc" out
+      putStrLn $ "Compiling to " ++ dest ++ "..."
       print ast
-    Nothing -> return ()
 
-runCompiler :: FilePath -> Maybe FilePath -> GlobalOptions -> IO ()
-runCompiler src dest opts = do
-  pipeline src opts >>= \case
-    Just ast -> do
-      let outPath = fromMaybe "out.bc" dest
-      putStrLn $ "Compiling to " ++ outPath ++ "..."
-      print ast
-    Nothing -> return ()
+execute :: FilePath -> Opts -> ([Expr] -> IO ()) -> IO ()
+execute path Opts {..} action =
+  runExceptT pipeline >>= \case
+    Left (stage, err) -> putStrLn $ (if wError then "FATAL [" ++ stage ++ "]: " else stage ++ ": ") ++ err
+    Right ast -> action ast
+  where
+    pipeline = do
+      src <- liftIO $ readFile path
+      tokens <- either (throwE . ("Lexer Error",)) pure $ tokenize path src
+      either (throwE . ("Parser Error",)) pure $ parse path tokens
 
-commandParser :: Parser Command
-commandParser =
+parser :: Parser Command
+parser =
   hsubparser
-    ( command "run" (info (runP <**> helper) (progDesc "Execute an Iris file"))
-        <> command "compile" (info (compileP <**> helper) (progDesc "Compile to binary"))
+    ( command "run" (info (Run <$> fileArg <*> flags) (progDesc "Execute an Iris file"))
+        <> command "compile" (info (Compile <$> fileArg <*> output <*> flags) (progDesc "Compile to binary"))
     )
+    <**> infoOption ("iris version " ++ showVersion version) (long "version" <> help "Show version")
   where
-    runP = Run <$> fileArg <*> globalFlags
-    compileP = Compile <$> fileArg <*> outputOpt <*> globalFlags
-
     fileArg = strArgument (metavar "FILE" <> help "Source .is file")
-    outputOpt = optional $ strOption (long "output" <> short 'o' <> metavar "OUT" <> help "Output destination")
-    globalFlags =
-      GlobalOptions
-        <$> switch (long "werror" <> help "Treat warnings as errors")
-        <*> switch (long "verbose" <> short 'v' <> help "Enable debug logging")
+    output = optional $ strOption (long "output" <> short 'o' <> metavar "OUT")
+    flags = Opts <$> switch (long "werror") <*> switch (long "verbose" <> short 'v')

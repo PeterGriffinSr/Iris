@@ -15,7 +15,7 @@
     ```
 2. Set up the build directory:
     ```bash
-    meson setup build --buildtype=release
+    meson setup build
     ```
 3. Compile the project:
     ```bash

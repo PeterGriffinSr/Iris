@@ -1,6 +1,7 @@
 #include <Iris/Backend/compiler.hpp>
 #include <Iris/Backend/module.hpp>
 #include <Iris/Common/error.hpp>
+#include <Iris/Common/version.hpp>
 #include <Iris/Frontend/lexer.hpp>
 #include <Iris/Frontend/parser.hpp>
 #include <Iris/Frontend/resolver.hpp>
@@ -12,7 +13,6 @@
 #include <functional>
 #include <iostream>
 #include <sstream>
-#include <version.hpp>
 
 namespace Iris {
 

@@ -3,7 +3,6 @@
 #include <Iris/Common/span.hpp>
 #include <Iris/Frontend/resolved_info.hpp>
 #include <memory>
-#include <optional>
 #include <variant>
 #include <vector>
 
@@ -49,7 +48,7 @@ struct BoolLiteral {
 struct Identifier {
   std::string name;
   Common::Span span;
-  std::optional<ResolvedInfo> resolved = std::nullopt;
+  std::optional<ResolvedInfo> resolved;
 };
 
 struct Unary {
@@ -85,7 +84,7 @@ struct Call {
 
 struct Param {
   std::string name;
-  uint32_t bindingIndex{0};
+  uint32_t bindingIndex{};
 };
 
 struct Lambda {
@@ -98,7 +97,7 @@ struct Let {
   std::string name;
   ExprPtr value;
   Common::Span span;
-  std::optional<ResolvedInfo> resolved = std::nullopt;
+  std::optional<ResolvedInfo> resolved;
 };
 
 struct Package {
@@ -125,23 +124,23 @@ using ExprVariant = std::variant<NumericLiteral, StringLiteral, BoolLiteral,
 
 struct Expr {
   ExprVariant val;
-
-  template <typename T> Expr(T &&node) : val(std::forward<T>(node)) {}
+  template <typename T> explicit Expr(T &&node) : val(std::forward<T>(node)) {}
 };
 
 template <typename T> ExprPtr makeExpr(T &&node) {
   return std::make_unique<Expr>(std::forward<T>(node));
 }
 
-template <typename Visitor> auto visit(Visitor &&v, const Expr &e) {
+template <typename Visitor> auto visitExpr(Visitor &&v, const Expr &e) {
   return std::visit(std::forward<Visitor>(v), e.val);
 }
 
-template <typename Visitor> auto visit(Visitor &&v, Expr &e) {
+template <typename Visitor> auto visitExpr(Visitor &&v, Expr &e) {
   return std::visit(std::forward<Visitor>(v), e.val);
 }
 
 inline Common::Span spanOf(const Expr &expr) {
-  return visit([](const auto &n) { return n.span; }, expr);
+  return visitExpr([](const auto &n) { return n.span; }, expr);
 }
+
 } // namespace Iris::Frontend

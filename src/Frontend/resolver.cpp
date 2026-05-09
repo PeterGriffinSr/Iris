@@ -1,6 +1,4 @@
-#include <Iris/Common/error.hpp>
 #include <Iris/Common/utils.hpp>
-#include <Iris/Frontend/ast.hpp>
 #include <Iris/Frontend/resolver.hpp>
 
 namespace Iris::Frontend {
@@ -19,16 +17,16 @@ uint32_t Resolver::declareExternal(const std::string &name) {
   return info.bindingIndex;
 }
 
-ResolvedInfo Resolver::declare(const std::string &name) {
+ResolvedInfo Resolver::declare(std::string_view name) {
   uint32_t depth = static_cast<uint32_t>(m_scopes.size() - 1);
   uint32_t index = m_nextIndex++;
-  m_scopes.back()[name] = Binding{depth, index};
+  m_scopes.back()[std::string(name)] = Binding{depth, index};
   return ResolvedInfo{depth, index, std::nullopt};
 }
 
-std::optional<ResolvedInfo> Resolver::lookup(const std::string &name) const {
+std::optional<ResolvedInfo> Resolver::lookup(std::string_view name) const {
   for (auto it = m_scopes.rbegin(); it != m_scopes.rend(); ++it) {
-    auto found = it->find(name);
+    auto found = it->find(std::string(name));
     if (found != it->end())
       return ResolvedInfo{found->second.scopeDepth, found->second.bindingIndex,
                           std::nullopt};

@@ -1,3 +1,9 @@
-import "core:testing/hope"
+let fib(n) {
+    if n <= 1 {
+        n
+    } else {
+        fib(n - 1) + fib(n - 2)
+    }
+}
 
-hope.assert(1 == 2, "test fail")
+print(fib(10))

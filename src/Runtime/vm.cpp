@@ -1,5 +1,3 @@
-#include <Iris/Common/error.hpp>
-#include <Iris/Debug/printer.hpp>
 #include <Iris/Runtime/opcodes.hpp>
 #include <Iris/Runtime/vm.hpp>
 #include <cassert>
@@ -381,14 +379,13 @@ std::optional<Value> VM::execute() {
     }
     case OpCode::Print: {
       Value v = pop();
-      std::cout << Debug::valueToString(v) << '\n';
+      std::cout << toString(v) << '\n';
       push(Value{Unit{}});
       break;
     }
     case OpCode::Panic: {
       Value v = pop();
-      emitError(Debug::valueToString(v), std::nullopt,
-                Common::RuntimeError::Panic);
+      emitError(toString(v), std::nullopt, Common::RuntimeError::Panic);
       return std::nullopt;
     }
       BINARY_NUM_OP(<, Lt, "<")

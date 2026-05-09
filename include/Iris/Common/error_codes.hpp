@@ -33,17 +33,28 @@ enum class ResolutionError : uint32_t {
   EmptyProgram = 301,
 };
 
-enum class TypeError : uint32_t {};
+enum class TypeError : uint32_t {
+  UnresolvedIdentifier = 400,
+  TypeMismatch = 401,
+  NotCallable = 402,
+  ArityMismatch = 403,
+  InfiniteType = 404,
+  ConditionNotBool = 405,
+  BranchMismatch = 406,
+  ArithmeticNonNum = 407,
+  ComparisonNonNum = 408,
+  LogicNonBool = 409,
+};
 
 enum class RuntimeError : uint32_t {
-  TooManyConstants = 400,
-  TooManyLocals = 401,
-  ArityMismatch = 402,
-  NotCallable = 403,
-  TypeError = 404,
-  StackOverflow = 405,
-  DivisionByZero = 406,
-  Panic = 407,
+  TooManyConstants = 500,
+  TooManyLocals = 501,
+  ArityMismatch = 502,
+  NotCallable = 503,
+  TypeError = 504,
+  StackOverflow = 505,
+  DivisionByZero = 506,
+  Panic = 507,
 };
 
 enum class IOError : uint32_t {

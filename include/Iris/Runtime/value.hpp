@@ -37,10 +37,11 @@ struct Closure {
   std::shared_ptr<Chunk> chunk;
   std::vector<Value> captures;
   std::vector<std::weak_ptr<Closure>> weakCaptures;
-  uint8_t arity;
+  uint8_t arity{0};
 };
 
-bool isTruthy(const Value &v) noexcept;
+[[nodiscard]] bool isTruthy(const Value &v) noexcept;
+[[nodiscard]] std::string toString(const Value &v) noexcept;
 
 inline bool valuesEqual(const Value &a, const Value &b) {
   return std::visit(
@@ -59,4 +60,5 @@ inline bool valuesEqual(const Value &a, const Value &b) {
       },
       a, b);
 }
+
 } // namespace Iris::Runtime

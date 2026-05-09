@@ -1,8 +1,5 @@
-#include <Iris/Common/error.hpp>
 #include <Iris/Common/utils.hpp>
-#include <Iris/Frontend/ast.hpp>
 #include <Iris/Frontend/parser.hpp>
-#include <Iris/Frontend/token.hpp>
 #include <cassert>
 #include <optional>
 #include <sstream>
@@ -137,7 +134,7 @@ BinaryOp Parser::tokenToBinaryOp(std::string_view value) {
   if (value == "||")
     return BinaryOp::Or;
   assert(false && "unknown binary operator");
-  return BinaryOp::Addition;
+  __builtin_unreachable();
 }
 
 std::vector<ExprPtr> Parser::parse() {
@@ -252,7 +249,8 @@ ExprPtr Parser::parseLet() {
 
     return makeExpr(Let{.name = std::move(name),
                         .value = std::move(lambda),
-                        .span = Common::Span::merge(letSpan, lambdaSpan)});
+                        .span = Common::Span::merge(letSpan, lambdaSpan),
+                        .resolved = std::nullopt});
   }
 
   expect(TokenType::Operator, "=", "expected '=' after name in let binding",
@@ -265,11 +263,10 @@ ExprPtr Parser::parseLet() {
   match(TokenType::Semicolon);
   Common::Span fullSpan = Common::Span::merge(letSpan, spanOf(*value));
 
-  return makeExpr(Let{
-      .name = std::move(name),
-      .value = std::move(value),
-      .span = fullSpan,
-  });
+  return makeExpr(Let{.name = std::move(name),
+                      .value = std::move(value),
+                      .span = fullSpan,
+                      .resolved = std::nullopt});
 }
 
 ExprPtr Parser::parseIf() {
@@ -431,8 +428,7 @@ ExprPtr Parser::parsePrimary() {
 
   if (tok.type == TokenType::Number) {
     advance();
-    double value = 0.0;
-    value = std::strtod(tok.value.data(), nullptr);
+    double value = std::strtod(tok.value.data(), nullptr);
     return makeExpr(NumericLiteral{.value = value, .span = tok.span});
   }
   if (tok.type == TokenType::String) {
@@ -449,7 +445,8 @@ ExprPtr Parser::parsePrimary() {
   }
   if (tok.type == TokenType::Identifier) {
     advance();
-    return makeExpr(Identifier{.name = tok.value, .span = tok.span});
+    return makeExpr(Identifier{
+        .name = tok.value, .span = tok.span, .resolved = std::nullopt});
   }
   if (tok.type == TokenType::Delimiter && tok.value == "(") {
     advance();

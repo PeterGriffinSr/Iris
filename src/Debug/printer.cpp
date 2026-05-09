@@ -1,9 +1,7 @@
 #include <Iris/Debug/printer.hpp>
 #include <Iris/Runtime/opcodes.hpp>
-#include <cmath>
 #include <iomanip>
 #include <iostream>
-#include <sstream>
 
 namespace Iris::Debug {
 
@@ -102,7 +100,7 @@ std::string_view unaryOpName(Frontend::UnaryOp op) noexcept {
   return "?";
 }
 
-std::string resolvedAnnotation(const std::optional<ResolvedInfo> &r) {
+std::string resolvedAnnotation(const std::optional<Frontend::ResolvedInfo> &r) {
   if (!r)
     return " @(unresolved)";
   return " @(depth=" + std::to_string(r->scopeDepth) +
@@ -118,7 +116,7 @@ void printBlock(const Frontend::Block &block, int depth) {
 }
 
 void printExprImpl(const Frontend::Expr &expr, int depth) {
-  visit(
+  Frontend::visitExpr(
       [&](const auto &node) {
         using T = std::decay_t<decltype(node)>;
 
@@ -195,45 +193,6 @@ void printExpr(const Frontend::Expr &expr, int indent) {
 void printAst(std::span<const Frontend::ExprPtr> exprs) {
   for (const Frontend::ExprPtr &e : exprs)
     printExprImpl(*e, 0);
-}
-
-std::string valueToString(const Runtime::Value &v) noexcept {
-  return std::visit(
-      [](const auto &val) -> std::string {
-        using T = std::decay_t<decltype(val)>;
-        if constexpr (std::is_same_v<T, double>) {
-          if (val == std::floor(val) && std::isfinite(val)) {
-            std::ostringstream ss;
-            ss << static_cast<long long>(val);
-            return ss.str();
-          }
-          std::ostringstream ss;
-          ss << val;
-          return ss.str();
-        } else if constexpr (std::is_same_v<T, bool>) {
-          return val ? "true" : "false";
-        } else if constexpr (std::is_same_v<T, std::string>) {
-          return val;
-        } else if constexpr (std::is_same_v<T, Runtime::Unit>) {
-          return "unit";
-        } else if constexpr (std::is_same_v<
-                                 T, std::shared_ptr<Runtime::Closure>>) {
-          return "<closure/" + std::to_string(val->arity) + ">";
-        } else if constexpr (std::is_same_v<
-                                 T, std::shared_ptr<Runtime::Namespace>>) {
-          std::string s = "<namespace {";
-          bool first = true;
-          for (const auto &[name, _] : *val->fields) {
-            if (!first)
-              s += ", ";
-            s += name;
-            first = false;
-          }
-          s += "}>";
-          return s;
-        }
-      },
-      v);
 }
 
 std::string_view opcodeName(Runtime::OpCode op) noexcept {
@@ -348,7 +307,7 @@ void printChunk(const std::shared_ptr<Runtime::Chunk> &chunk) {
         uint8_t idx = chunk->code[++i];
         std::cout << static_cast<int>(idx);
         if (idx < chunk->constants.size())
-          std::cout << "  ; " << valueToString(chunk->constants[idx]);
+          std::cout << "  ; " << toString(chunk->constants[idx]);
         break;
       }
       case Runtime::OpCode::PushBool:
@@ -377,7 +336,7 @@ void printChunk(const std::shared_ptr<Runtime::Chunk> &chunk) {
   } else {
     for (size_t i = 0; i < chunk->constants.size(); ++i) {
       std::cout << "  " << std::right << std::setw(4) << i << "  "
-                << valueToString(chunk->constants[i]) << '\n';
+                << toString(chunk->constants[i]) << '\n';
     }
   }
 

@@ -13,7 +13,6 @@ public:
                     Common::DiagnosticBag &bag);
 
   uint32_t declareExternal(const std::string &name);
-
   void resolve(std::span<ExprPtr> program);
 
 private:
@@ -32,15 +31,14 @@ private:
   void pushScope();
   void popScope();
 
-  ResolvedInfo declare(const std::string &name);
-  std::optional<ResolvedInfo> lookup(const std::string &name) const;
+  [[nodiscard]] ResolvedInfo declare(std::string_view name);
+  [[nodiscard]] std::optional<ResolvedInfo> lookup(std::string_view name) const;
 
   void emitError(std::string msg, std::optional<std::string> hint,
                  Common::Span span,
                  std::optional<Common::Error> code = std::nullopt);
 
   void collectTopLevel(std::span<ExprPtr> program);
-
   void resolveExpr(Expr &expr);
   void resolveLet(Let &let);
   void resolveLambda(Lambda &lambda);

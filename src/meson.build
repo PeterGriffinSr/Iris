@@ -1,11 +1,16 @@
 lib_sources = files(
+    'Backend/compiler.cpp',
+    'Backend/module.cpp',
     'Common/error.cpp',
     'Debug/printer.cpp',
     'Frontend/lexer.cpp',
     'Frontend/parser.cpp',
     'Frontend/resolver.cpp',
-    'Backend/compiler.cpp',
-    'Backend/module.cpp',
+    'Frontend/scheme.cpp',
+    'Frontend/type.cpp',
+    'Frontend/type_env.cpp',
+    'Frontend/typechecker.cpp',
+    'Frontend/unifier.cpp',
     'Runtime/value.cpp',
     'Runtime/vm.cpp',
     'cli.cpp',
@@ -18,7 +23,4 @@ iris_lib = static_library(
     install: false,
 )
 
-iris_dep = declare_dependency(
-    link_with: iris_lib,
-    include_directories: [inc_dir, build_inc_dir]
-)
+iris_dep = declare_dependency(link_with: iris_lib, include_directories: [inc_dir, build_inc_dir])

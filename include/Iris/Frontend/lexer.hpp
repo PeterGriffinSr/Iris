@@ -2,7 +2,6 @@
 
 #include <Iris/Common/error.hpp>
 #include <Iris/Frontend/token.hpp>
-#include <optional>
 #include <vector>
 
 namespace Iris::Frontend {
@@ -26,7 +25,7 @@ private:
   [[nodiscard]] bool atEnd() const noexcept;
   [[nodiscard]] char peek(size_t offset = 0) const noexcept;
   char advance() noexcept;
-  bool match(char expected) noexcept;
+  [[nodiscard]] bool match(char expected) noexcept;
 
   [[nodiscard]] Token makeToken(TokenType type, std::string value,
                                 Common::Span span) const;

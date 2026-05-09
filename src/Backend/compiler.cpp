@@ -1,7 +1,5 @@
 #include <Iris/Backend/compiler.hpp>
-#include <Iris/Common/error.hpp>
 #include <Iris/Common/utils.hpp>
-#include <Iris/Frontend/ast.hpp>
 #include <cassert>
 
 namespace Iris::Backend {

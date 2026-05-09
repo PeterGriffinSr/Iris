@@ -5,7 +5,6 @@
 #include <Iris/Runtime/builtins.hpp>
 #include <Iris/Runtime/vm.hpp>
 #include <algorithm>
-#include <cstdlib>
 #include <fstream>
 #include <sstream>
 

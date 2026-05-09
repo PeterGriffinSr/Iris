@@ -1,7 +1,5 @@
-#include <Iris/Common/error.hpp>
 #include <Iris/Common/utils.hpp>
 #include <Iris/Frontend/lexer.hpp>
-#include <Iris/Frontend/token.hpp>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -110,14 +108,15 @@ bool Lexer::needsSemicolonBefore(char next) const noexcept {
             m_last == TokenType::String);
   }
 
-  if (!std::isalpha(next) && next != '_' && !std::isdigit(next) && next != '"')
+  if (!std::isalpha((unsigned char)next) && next != '_' &&
+      !std::isdigit(next) && next != '"')
     return false;
 
-  if (std::isalpha(next) || next == '_') {
+  if (std::isalpha((unsigned char)next) || next == '_') {
     size_t start = m_pos;
     size_t i = start;
     while (i < m_source.size() &&
-           (std::isalnum(m_source[i]) || m_source[i] == '_'))
+           (std::isalnum((unsigned char)m_source[i]) || m_source[i] == '_'))
       ++i;
     if (m_source.substr(start, i - start) == "else")
       return false;
@@ -132,7 +131,7 @@ TokenType Lexer::effectiveLastType(const Token &tok) noexcept {
     if (v == '(' || v == '{' || v == '[')
       return TokenType::Operator;
   }
-  if (tok.type == TokenType::Keyword && s_openingKeywords.count(tok.value))
+  if (tok.type == TokenType::Keyword && s_openingKeywords.contains(tok.value))
     return TokenType::Operator;
   return tok.type;
 }
@@ -238,9 +237,8 @@ Token Lexer::scanIdentifierOrKeyword(uint32_t startLine, uint32_t startCol) {
     advance();
 
   std::string word(m_source.substr(start, m_pos - start));
-  auto it = s_keywords.find(word);
   TokenType type =
-      (it != s_keywords.end()) ? TokenType::Keyword : TokenType::Identifier;
+      s_keywords.contains(word) ? TokenType::Keyword : TokenType::Identifier;
   return makeToken(type, std::move(word), makeSpan(startLine, startCol));
 }
 
@@ -369,11 +367,11 @@ std::vector<Token> Lexer::tokenize() {
     char c = advance();
 
     Token tok = [&]() -> Token {
-      if (std::isdigit(c))
+      if (std::isdigit((unsigned char)c))
         return scanNumber(startLine, startCol);
       if (c == '"')
         return scanString(startLine, startCol);
-      if (std::isalpha(c) || c == '_')
+      if (std::isalpha((unsigned char)c) || c == '_')
         return scanIdentifierOrKeyword(startLine, startCol);
       return scanOperatorOrDelimiter(startLine, startCol);
     }();

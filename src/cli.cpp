@@ -1,13 +1,11 @@
-#include <Iris/Backend/compiler.hpp>
 #include <Iris/Backend/module.hpp>
-#include <Iris/Common/error.hpp>
 #include <Iris/Common/version.hpp>
 #include <Iris/Frontend/lexer.hpp>
 #include <Iris/Frontend/parser.hpp>
 #include <Iris/Frontend/resolver.hpp>
+#include <Iris/Frontend/typechecker.hpp>
 #include <Iris/Runtime/builtins.hpp>
 #include <Iris/Runtime/vm.hpp>
-#include <Iris/cli.hpp>
 #include <charconv>
 #include <fstream>
 #include <functional>
@@ -119,6 +117,13 @@ int runFile(std::string_view path, const CompilerOptions &opts) {
   }
 
   resolver.resolve(ast);
+
+  bag.printSummary();
+  if (bag.hasErrors())
+    return 1;
+
+  Frontend::TypeChecker typeChecker(path, source, bag);
+  typeChecker.check(ast);
 
   bag.printSummary();
   if (bag.hasErrors())

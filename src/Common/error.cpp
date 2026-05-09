@@ -33,37 +33,34 @@ void printDiagnostic(const Diagnostic &d) {
   std::cerr << ": " << d.message << '\n';
 
   const Span &sp = d.span;
-  if (sp.startLine == 0)
-    goto hints;
 
-  std::cerr << " --> " << d.filename << ':' << sp.startLine << ':'
-            << sp.startCol << '\n';
+  if (sp.startLine > 0) {
+    std::cerr << " --> " << d.filename << ':' << sp.startLine << ':'
+              << sp.startCol << '\n';
 
-  if (!d.sourceLine.empty()) {
-    std::string lineStr = std::to_string(sp.startLine);
-    size_t gutter = lineStr.size();
-    std::string gutterPad(gutter + 1, ' ');
+    if (!d.sourceLine.empty()) {
+      std::string lineStr = std::to_string(sp.startLine);
+      std::string gutterPad(lineStr.size() + 1, ' ');
 
-    std::cerr << gutterPad << "|\n";
-    std::cerr << lineStr << " | " << d.sourceLine << '\n';
-    std::cerr << gutterPad << "| ";
+      std::cerr << gutterPad << "|\n";
+      std::cerr << lineStr << " | " << d.sourceLine << '\n';
+      std::cerr << gutterPad << "| ";
 
-    uint32_t offset = sp.startCol > 0 ? sp.startCol - 1 : 0;
-    std::cerr << std::string(offset, ' ');
+      uint32_t offset = sp.startCol > 0 ? sp.startCol - 1 : 0;
+      std::cerr << std::string(offset, ' ');
 
-    uint32_t underlineWidth = sp.isMultiLine() ? 1 : std::max(sp.width(), 1u);
-    std::cerr << std::string(underlineWidth, '^') << '\n';
+      uint32_t underlineWidth = sp.isMultiLine() ? 1 : std::max(sp.width(), 1u);
+      std::cerr << std::string(underlineWidth, '^') << '\n';
+    }
+
+    if (d.hint || d.code) {
+      std::string lineStr = std::to_string(sp.startLine);
+      std::cerr << std::string(lineStr.size() + 1, ' ') << "|\n";
+    }
   }
 
-  if ((d.hint || d.code) && sp.startLine > 0) {
-    std::string lineStr = std::to_string(sp.startLine);
-    std::cerr << std::string(lineStr.size() + 1, ' ') << "|\n";
-  }
-
-hints:
   if (d.hint)
     std::cerr << "= hint: " << *d.hint << '\n';
-
   if (d.code)
     std::cerr << "= note: run `iris --explain " << formatCode(*d.code)
               << "` for more detail\n";
